@@ -12,6 +12,21 @@ import {
 } from 'react-native';
 import { supabase } from '../supabase';
 
+/** ---------- Utils ---------- */
+const parseSupabaseError = (err: unknown) => {
+  if (!err) return 'Unknown error';
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === 'object' && err !== null) {
+    const maybe = err as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    const fields = [maybe.message, maybe.details, maybe.hint, maybe.code].filter(
+      (field): field is string => typeof field === 'string' && field.trim().length > 0
+    );
+    if (fields.length) return fields.join(' — ');
+  }
+  try { return JSON.stringify(err); } catch { return String(err); }
+};
+
+/** ---------- Types ---------- */
 type LobbyRow = {
   id: string;
   code: string;
@@ -31,6 +46,31 @@ type Props = {
   onCreateLobby?: () => void;
 };
 
+/** ---------- RPC helpers (no generics to appease TS versions) ---------- */
+async function rpcGetLobbyMemberCount(lobbyId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('get_lobby_member_count', {
+    p_lobby_id: lobbyId,
+  });
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+type LobbyPlayerRow = {
+  lobby_id: string;
+  user_id: string;
+  joined_at: string;
+  points_earned: number | null;
+  correct_bets: number | null;
+};
+async function rpcGetLobbyRoster(lobbyId: string): Promise<LobbyPlayerRow[]> {
+  const { data, error } = await supabase.rpc('get_lobby_roster', {
+    p_lobby_id: lobbyId,
+  });
+  if (error) throw error;
+  return (data as LobbyPlayerRow[]) ?? [];
+}
+
+/** ---------- Screen ---------- */
 const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
   const [username, setUsername] = useState<string | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
@@ -40,6 +80,7 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
 
   const [codeInput, setCodeInput] = useState('');
   const [joining, setJoining] = useState(false);
+  const [joiningLobbyId, setJoiningLobbyId] = useState<string | null>(null); // NEW
 
   const loadUser = useCallback(async () => {
     const { data, error } = await supabase.auth.getUser();
@@ -54,8 +95,8 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
       .single();
     if (profileErr) throw profileErr;
 
-    setUsername(profile?.username ?? null);
-    setCredits(profile?.points ?? 0);
+    setUsername((profile as any)?.username ?? null);
+    setCredits((profile as any)?.points ?? 0);
   }, []);
 
   const loadLobbies = useCallback(async () => {
@@ -105,6 +146,7 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
     };
   }, [loadLobbies, loadUser]);
 
+  /** Join by manual code (kept) */
   const joinByCode = useCallback(async () => {
     try {
       setJoining(true);
@@ -114,28 +156,101 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
         return;
       }
 
-      const { data, error } = await supabase.rpc('join_lobby_by_code', { p_code: code });
-      if (error) throw error;
-
-      const lobbyId = (Array.isArray(data) ? data?.[0]?.lobby_id : data?.lobby_id) as string | undefined;
-      if (!lobbyId) throw new Error('Lobby not found');
+      const { data: lobby, error: lobbyErr } = await supabase
+        .from('lobbies')
+        .select('id, status, max_players')
+        .eq('code', code)
+        .maybeSingle();
+      if (lobbyErr) throw lobbyErr;
+      if (!lobby) throw new Error('Lobby not found');
+      if (lobby.status === 'finished' || lobby.status === 'cancelled') {
+        throw new Error('This lobby is no longer accepting players.');
+      }
 
       const { data: userData, error: userErr } = await supabase.auth.getUser();
       if (userErr) throw userErr;
       const userId = userData.user?.id;
       if (!userId) throw new Error('No authenticated user');
 
-      await supabase
-        .from('lobby_players')
-        .upsert({ lobby_id: lobbyId, user_id: userId }, { onConflict: 'lobby_id,user_id' });
+      const currentCount = await rpcGetLobbyMemberCount(lobby.id);
+      if (lobby.max_players && typeof lobby.max_players === 'number') {
+        if (currentCount >= lobby.max_players) throw new Error('Lobby is full.');
+      }
 
-      onEnterLobby?.(lobbyId);
+      const { error: insertErr } = await supabase
+        .from('lobby_players')
+        .upsert(
+          { lobby_id: lobby.id, user_id: userId, joined_at: new Date().toISOString() },
+          { onConflict: 'lobby_id,user_id' }
+        );
+      if (insertErr) throw insertErr;
+
+      onEnterLobby?.(lobby.id);
     } catch (e) {
-      Alert.alert('Join failed', e instanceof Error ? e.message : String(e));
+      Alert.alert('Join failed', parseSupabaseError(e));
     } finally {
       setJoining(false);
     }
   }, [codeInput, onEnterLobby]);
+
+  /** NEW: Tap a lobby row to auto-join that lobby */
+  const joinLobbyFromList = useCallback(
+    async (lobbyId: string) => {
+      try {
+        setJoiningLobbyId(lobbyId);
+
+        // Fetch the lobby to validate it’s joinable
+        const { data: lobby, error: lobbyErr } = await supabase
+          .from('lobbies')
+          .select('id, status, max_players')
+          .eq('id', lobbyId)
+          .maybeSingle();
+        if (lobbyErr) throw lobbyErr;
+        if (!lobby) throw new Error('Lobby not found');
+        if (lobby.status === 'finished' || lobby.status === 'cancelled') {
+          throw new Error('This lobby is no longer accepting players.');
+        }
+
+        // Get user
+        const { data: userData, error: userErr } = await supabase.auth.getUser();
+        if (userErr) throw userErr;
+        const userId = userData.user?.id;
+        if (!userId) throw new Error('No authenticated user');
+
+        // Capacity check (accurate via RPC)
+        const currentCount = await rpcGetLobbyMemberCount(lobby.id);
+        if (lobby.max_players && typeof lobby.max_players === 'number') {
+          if (currentCount >= lobby.max_players) throw new Error('Lobby is full.');
+        }
+
+        // Upsert membership
+        const { error: insertErr } = await supabase
+          .from('lobby_players')
+          .upsert(
+            { lobby_id: lobby.id, user_id: userId, joined_at: new Date().toISOString() },
+            { onConflict: 'lobby_id,user_id' }
+          );
+        if (insertErr) throw insertErr;
+
+        onEnterLobby?.(lobby.id);
+      } catch (e) {
+        Alert.alert('Join failed', parseSupabaseError(e));
+      } finally {
+        setJoiningLobbyId(null);
+      }
+    },
+    [onEnterLobby]
+  );
+
+  const signOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      Alert.alert('Signed out', 'You have been logged out.');
+    } catch (err: any) {
+      Alert.alert('Sign out failed', err.message);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -143,6 +258,7 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
       <View style={styles.purpleGlow} />
       <View style={styles.greenGlow} />
 
+      {/* Header with logout button */}
       <View style={styles.headerRow}>
         <View>
           <Text style={styles.brand}>GamePoints</Text>
@@ -154,11 +270,17 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
             </Text>
           )}
         </View>
-        <View style={styles.creditBadge}>
-          {loading ? <ActivityIndicator /> : <Text style={styles.creditValue}>{credits}</Text>}
+        <View style={{ alignItems: 'flex-end' }}>
+          <View style={styles.creditBadge}>
+            {loading ? <ActivityIndicator /> : <Text style={styles.creditValue}>{credits}</Text>}
+          </View>
+          <TouchableOpacity onPress={signOut} style={styles.logoutButton}>
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
+      {/* Join lobby by code (still available) */}
       <View style={styles.joinRow}>
         <TextInput
           style={styles.codeInput}
@@ -178,6 +300,7 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
         </TouchableOpacity>
       </View>
 
+      {/* Create lobby section */}
       <View style={styles.createBox}>
         <Text style={styles.sectionTitle}>Create your lobby</Text>
         <Text style={styles.sectionSubtitle}>
@@ -192,9 +315,10 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
         </TouchableOpacity>
       </View>
 
+      {/* Lobbies list (tap to auto-join) */}
       <View style={styles.lobbySection}>
         <Text style={styles.sectionTitle}>Current Lobbies</Text>
-        <Text style={styles.sectionSubtitle}>Fresh lobbies appear here while hosts wait.</Text>
+        <Text style={styles.sectionSubtitle}>Tap a lobby to join instantly.</Text>
 
         {loading ? (
           <ActivityIndicator />
@@ -209,9 +333,15 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
               const time = game
                 ? new Date(game.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                 : 'TBD';
+              const busy = joiningLobbyId === item.id;
 
               return (
-                <View style={styles.lobbyCard}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => joinLobbyFromList(item.id)}
+                  disabled={busy}
+                  style={[styles.lobbyCard, busy && { opacity: 0.6 }]}
+                >
                   <View>
                     <Text style={styles.lobbyName}>{matchup}</Text>
                     <Text style={styles.lobbyMeta}>
@@ -219,10 +349,16 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
                     </Text>
                   </View>
                   <View style={styles.buyInPill}>
-                    <Text style={styles.buyInValue}>{item.buy_in}</Text>
-                    <Text style={styles.buyInLabel}>GP</Text>
+                    {busy ? (
+                      <ActivityIndicator />
+                    ) : (
+                      <>
+                        <Text style={styles.buyInValue}>{item.buy_in}</Text>
+                        <Text style={styles.buyInLabel}>GP</Text>
+                      </>
+                    )}
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             }}
           />
@@ -234,6 +370,7 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
 
 export default LobbyScreen;
 
+/** ---------- Styles ---------- */
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -280,6 +417,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   creditValue: { color: '#1CE783', fontSize: 18, fontWeight: '700' },
+  logoutButton: { marginTop: 6, paddingVertical: 4, paddingHorizontal: 8 },
+  logoutText: { color: '#FF5555', fontSize: 12, fontWeight: '600' },
   joinRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 24, gap: 12 },
   codeInput: {
     flex: 1,
@@ -332,6 +471,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#1CE783',
+    minWidth: 56,
+    minHeight: 32,
+    justifyContent: 'center',
   },
   buyInValue: { color: '#1CE783', fontSize: 16, fontWeight: '700' },
   buyInLabel: { color: '#6F6895', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 },

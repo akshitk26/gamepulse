@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { supabase } from '../supabase';
+import { parseSupabaseError } from '../utils/parseSupabaseError';
 
 type GameRow = {
   id: string;
@@ -32,17 +33,59 @@ const BetpartyCreationScreen: React.FC<BetpartyCreationScreenProps> = ({ onBack,
   const [loading, setLoading] = useState(true);
   const [creatingFor, setCreatingFor] = useState<string | null>(null);
 
-  const loadGames = useCallback(async () => {
-    const { data, error } = await supabase
+  const fetchGames = useCallback(async () => {
+    return supabase
       .from('games')
       .select('id, league, home, away, start_time')
       .gte('start_time', new Date().toISOString())
       .order('start_time', { ascending: true })
       .limit(25);
-
-    if (error) throw error;
-    setGames((data ?? []) as GameRow[]);
   }, []);
+
+  const seedGames = useCallback(async () => {
+    const now = new Date();
+    const fixtures = [
+      {
+        league: 'NFL',
+        home: 'Chiefs',
+        away: 'Ravens',
+        start_time: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
+      },
+      {
+        league: 'NFL',
+        home: 'Eagles',
+        away: 'Cowboys',
+        start_time: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        league: 'NFL',
+        home: '49ers',
+        away: 'Bills',
+        start_time: new Date(now.getTime() + 3 * 60 * 60 * 1000).toISOString(),
+      },
+    ];
+
+    const { error } = await supabase.from('games').insert(fixtures);
+    if (error && error.code !== '23505') {
+      // ignore duplicate errors but surface anything else
+      throw error;
+    }
+  }, []);
+
+  const loadGames = useCallback(async () => {
+    const { data, error } = await fetchGames();
+    if (error) throw error;
+
+    let rows = (data ?? []) as GameRow[];
+    if (!rows.length) {
+      await seedGames();
+      const { data: seeded, error: seededErr } = await fetchGames();
+      if (seededErr) throw seededErr;
+      rows = (seeded ?? []) as GameRow[];
+    }
+
+    setGames(rows);
+  }, [fetchGames, seedGames]);
 
   useEffect(() => {
     (async () => {
@@ -50,7 +93,7 @@ const BetpartyCreationScreen: React.FC<BetpartyCreationScreenProps> = ({ onBack,
         setLoading(true);
         await loadGames();
       } catch (e) {
-        Alert.alert('Load failed', e instanceof Error ? e.message : String(e));
+        Alert.alert('Load failed', parseSupabaseError(e));
       } finally {
         setLoading(false);
       }
@@ -108,13 +151,21 @@ const BetpartyCreationScreen: React.FC<BetpartyCreationScreenProps> = ({ onBack,
       const lobbyId = lobbyData?.id as string | undefined;
       if (!lobbyId) throw new Error('Lobby id missing after create');
 
-      await supabase
+      const { error: membershipErr } = await supabase
         .from('lobby_players')
-        .upsert({ lobby_id: lobbyId, user_id: userId }, { onConflict: 'lobby_id,user_id' });
+        .upsert(
+          {
+            lobby_id: lobbyId,
+            user_id: userId,
+            joined_at: new Date().toISOString(),
+          },
+          { onConflict: 'lobby_id,user_id' }
+        );
+      if (membershipErr) throw membershipErr;
 
       onCreated?.(lobbyId);
     } catch (e) {
-      Alert.alert('Create failed', e instanceof Error ? e.message : String(e));
+      Alert.alert('Create failed', parseSupabaseError(e));
     } finally {
       setCreatingFor(null);
     }
