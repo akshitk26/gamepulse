@@ -5,6 +5,7 @@ import { supabase } from './supabase';
 import LobbyScreen from './screens/LobbyScreen';
 import LoginScreen from './screens/LoginScreen';
 
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [booting, setBooting] = useState(true);
