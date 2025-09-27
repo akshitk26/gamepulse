@@ -32,7 +32,7 @@ const LobbyScreen: React.FC<LobbyScreenProps> = ({ onCreatePress }) => {
       <View style={styles.headerRow}>
         <View>
           <Text style={styles.brand}>GamePoints</Text>
-          <Text style={styles.tagline}>Step into tonight's BetParties.</Text>
+          <Text style={styles.tagline}>Step into today's BetParties.</Text>
         </View>
         <View style={styles.creditBadge}>
           <Text style={styles.creditValue}>{credits}</Text>

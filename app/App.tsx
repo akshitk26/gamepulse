@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Alert } from 'react-native';
 import LobbyScreen from './screens/LobbyScreen';
 import BetpartyCreationScreen from './screens/BetpartyCreationScreen';
+import { supabase } from './supabase';
 
 type ScreenKey = 'lobby' | 'create';
 
