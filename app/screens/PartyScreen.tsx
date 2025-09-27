@@ -1,12 +1,6 @@
-import { StatusBar } from 'expo-status-bar';
-import React from 'react';
-import {
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+// PartyScreen.tsx
+import React, { useState } from "react";
+import { View, Text, FlatList, StyleSheet, TouchableOpacity } from "react-native";
 
 type Participant = {
   id: string;
@@ -18,221 +12,194 @@ type Lobby = {
   name: string;
   buyIn: number;
   maxSize: number;
+  hostId: string;
   participants: Participant[];
   statusNote?: string;
 };
 
 type PartyScreenProps = {
   lobby: Lobby;
-  onBackToLobby?: () => void;
-  onInvitePress?: () => void;
+  currentUserId: string;
+  onBackToLobby: () => void;
+  onInvitePress: () => void;
 };
 
-const PartyScreen: React.FC<PartyScreenProps> = ({ lobby, onBackToLobby, onInvitePress }) => {
-  const meta = `${lobby.participants.length}/${lobby.maxSize} joined`;
+export default function PartyScreen({ 
+  lobby, 
+  currentUserId, 
+  onBackToLobby, 
+  onInvitePress 
+}: PartyScreenProps) {
+  const [gameStarted, setGameStarted] = useState(false);
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <Text style={styles.header}>{lobby.name}</Text>
+      <Text style={styles.lobbyInfo}>Buy-in: ${lobby.buyIn} • {lobby.participants.length}/{lobby.maxSize} players</Text>
+      {lobby.statusNote && <Text style={styles.statusNote}>{lobby.statusNote}</Text>}
 
-      <View style={styles.purpleGlow} />
-      <View style={styles.greenGlow} />
-
-      <View style={styles.headerRow}>
-        <TouchableOpacity
-          onPress={onBackToLobby}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.backLabel}>{'< Lobby'}</Text>
-        </TouchableOpacity>
-        <Text style={styles.brand}>GamePoints</Text>
-        <View style={styles.headerSpacer} />
-      </View>
-
-      <View style={styles.partyCard}>
-        <Text style={styles.partyTitle}>{lobby.name}</Text>
-        <Text style={styles.partyMeta}>{meta} • Buy-in {lobby.buyIn} GP</Text>
-        <View style={styles.cardDivider} />
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Players in Betparty</Text>
-          <Text style={styles.sectionSubtitle}>
-            Waiting on {Math.max(lobby.maxSize - lobby.participants.length, 0)} more
-          </Text>
-        </View>
-        <FlatList
-          data={lobby.participants}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.playerRow}>
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarInitial}>{item.name.charAt(0).toUpperCase()}</Text>
-              </View>
-              <View>
+      {!gameStarted ? (
+        <>
+          <Text style={styles.subheader}>Players in the room:</Text>
+          <FlatList
+            data={lobby.participants}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <View style={styles.playerCard}>
                 <Text style={styles.playerName}>{item.name}</Text>
-                <Text style={styles.playerRole}>{item.id === 'me' ? 'Host' : 'Player'}</Text>
+                {item.id === lobby.hostId && <Text style={styles.hostTag}>HOST</Text>}
               </View>
-            </View>
-          )}
-          ItemSeparatorComponent={() => <View style={styles.playerSeparator} />}
-          style={styles.playerList}
-          contentContainerStyle={styles.playerListContent}
-        />
-      </View>
-
-      <TouchableOpacity
-        onPress={onInvitePress}
-        activeOpacity={0.85}
-        style={styles.inviteButton}
-      >
-        <Text style={styles.inviteLabel}>Invite Players</Text>
-      </TouchableOpacity>
+            )}
+            style={{ width: "100%" }}
+          />
+          
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={styles.inviteButton}
+              onPress={onInvitePress}
+            >
+              <Text style={styles.inviteButtonText}>Invite Players</Text>
+            </TouchableOpacity>
+            
+            {currentUserId === lobby.hostId && (
+              <TouchableOpacity
+                style={styles.startButton}
+                onPress={() => setGameStarted(true)}
+              >
+                <Text style={styles.startButtonText}>Start Game</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          
+          <TouchableOpacity
+            style={styles.leaveButton}
+            onPress={onBackToLobby}
+          >
+            <Text style={styles.leaveButtonText}>Leave Party</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <View style={styles.gameContainer}>
+          <Text style={styles.subheader}>Suggested Bets & Stats</Text>
+          <Text style={styles.text}>[Dynamic game stats will appear here]</Text>
+          <TouchableOpacity
+            style={styles.leaveButton}
+            onPress={onBackToLobby}
+          >
+            <Text style={styles.leaveButtonText}>Back to Lobby</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
-};
-
-export default PartyScreen;
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#05030A',
-    paddingHorizontal: 24,
-    paddingTop: 64,
-    paddingBottom: 32,
-  },
-  purpleGlow: {
-    position: 'absolute',
-    top: -140,
-    right: -80,
-    width: 280,
-    height: 280,
-    borderRadius: 280,
-    backgroundColor: 'rgba(113, 64, 255, 0.38)',
-  },
-  greenGlow: {
-    position: 'absolute',
-    bottom: -160,
-    left: -100,
-    width: 320,
-    height: 320,
-    borderRadius: 320,
-    backgroundColor: 'rgba(28, 231, 131, 0.22)',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 36,
-  },
-  backLabel: {
-    color: '#6F6895',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  brand: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  headerSpacer: {
-    width: 64,
-  },
-  partyCard: {
-    backgroundColor: 'rgba(12, 12, 21, 0.92)',
-    borderRadius: 24,
+    backgroundColor: "#05030A",
+    alignItems: "center",
     padding: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    flex: 1,
+    paddingTop: 48,
   },
-  partyTitle: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 6,
+  header: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#8000FF",
+    marginBottom: 8,
   },
-  partyMeta: {
-    color: '#9088B4',
-    fontSize: 14,
-    marginBottom: 20,
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    marginBottom: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    color: '#FFFFFF',
+  lobbyInfo: {
     fontSize: 16,
-    fontWeight: '700',
+    color: "#C0B9D9",
+    marginBottom: 8,
   },
-  sectionSubtitle: {
-    color: '#6F6895',
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+  statusNote: {
+    fontSize: 14,
+    color: "#00FF88",
+    fontWeight: "600",
+    marginBottom: 24,
   },
-  playerList: {
-    flexGrow: 0,
-  },
-  playerListContent: {
-    paddingBottom: 12,
-  },
-  playerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  playerSeparator: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    marginVertical: 12,
-  },
-  avatarPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: 'rgba(28, 231, 131, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(28, 231, 131, 0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  avatarInitial: {
-    color: '#1CE783',
+  subheader: {
     fontSize: 18,
-    fontWeight: '700',
+    color: "#FFFFFF",
+    marginBottom: 12,
+  },
+  playerCard: {
+    backgroundColor: "rgba(128, 0, 255, 0.1)",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   playerName: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
-  playerRole: {
-    color: '#6F6895',
+  hostTag: {
+    color: "#8000FF",
     fontSize: 12,
-    marginTop: 2,
+    fontWeight: "700",
+    backgroundColor: "rgba(128, 0, 255, 0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  buttonContainer: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 24,
+    marginBottom: 16,
+  },
+  startButton: {
+    backgroundColor: "#8000FF",
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+  },
+  startButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
   },
   inviteButton: {
-    marginTop: 24,
-    backgroundColor: 'rgba(28, 231, 131, 0.12)',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#1CE783',
+    backgroundColor: "rgba(128, 0, 255, 0.2)",
     paddingVertical: 14,
-    alignItems: 'center',
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#8000FF",
   },
-  inviteLabel: {
-    color: '#1CE783',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.4,
+  inviteButtonText: {
+    color: "#8000FF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  leaveButton: {
+    backgroundColor: "transparent",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FF4444",
+  },
+  leaveButtonText: {
+    color: "#FF4444",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  gameContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+  },
+  text: {
+    color: "#C0B9D9",
+    fontSize: 16,
+    marginTop: 12,
   },
 });
+// End of PartyScreen.tsx

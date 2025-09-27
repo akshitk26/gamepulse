@@ -5,6 +5,7 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
 
 # OS artifacts
 .DS_Store
@@ -14,6 +15,16 @@ yarn-error.log*
 .expo-shared/
 web-build/
 dist/
+
+# Firebase CLI outputs
+.firebase/
+.firebaserc
+firebase.json
+
+# Google Data Connect local state
+dataconnect/.dataconnect/
+dataconnect-debug.log
+pglite-debug.log
 
 # Environment files
 .env

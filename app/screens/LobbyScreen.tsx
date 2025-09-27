@@ -1,27 +1,37 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
+import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+
+type Participant = {
+  id: string;
+  name: string;
+};
 
 type Lobby = {
   id: string;
-  match: string;
+  name: string;
   buyIn: number;
-  status: string;
+  maxSize: number;
+  hostId: string;
+  participants: Participant[];
+  statusNote?: string;
 };
 
 type LobbyScreenProps = {
+  lobbies: Lobby[];
+  credits: number;
+  userName?: string;
   onCreatePress?: () => void;
+  onSignOut?: () => void;
 };
 
-const lobbies: Lobby[] = [
-  { id: '1', match: 'Knicks @ Heat', buyIn: 25, status: 'Tips in 15m' },
-  { id: '2', match: 'Warriors @ Grizzlies', buyIn: 40, status: 'Live • 42 joined' },
-  { id: '3', match: 'Celtics @ Bucks', buyIn: 60, status: 'Opens in 1h' },
-];
-
-const LobbyScreen: React.FC<LobbyScreenProps> = ({ onCreatePress }) => {
-  const [credits] = useState<number>(1000);
-
+const LobbyScreen: React.FC<LobbyScreenProps> = ({
+  lobbies,
+  credits,
+  userName,
+  onCreatePress,
+  onSignOut,
+}) => {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -32,10 +42,23 @@ const LobbyScreen: React.FC<LobbyScreenProps> = ({ onCreatePress }) => {
       <View style={styles.headerRow}>
         <View>
           <Text style={styles.brand}>GamePoints</Text>
-          <Text style={styles.tagline}>Step into today's BetParties.</Text>
+          <Text style={styles.tagline}>
+            {userName ? `Welcome back, ${userName}.` : "Step into tonight's BetParties."}
+          </Text>
         </View>
-        <View style={styles.creditBadge}>
-          <Text style={styles.creditValue}>{credits}</Text>
+        <View style={styles.headerActions}>
+          <View style={styles.creditBadge}>
+            <Text style={styles.creditValue}>{credits}</Text>
+          </View>
+          {onSignOut && (
+            <TouchableOpacity
+              style={styles.signOutButton}
+              activeOpacity={0.85}
+              onPress={onSignOut}
+            >
+              <Text style={styles.signOutLabel}>Sign out</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -62,18 +85,23 @@ const LobbyScreen: React.FC<LobbyScreenProps> = ({ onCreatePress }) => {
           Pick a matchup, stake your GamePoints, sweat the props.
         </Text>
 
-        {lobbies.map((lobby) => (
-          <View key={lobby.id} style={styles.lobbyCard}>
-            <View>
-              <Text style={styles.lobbyName}>{lobby.match}</Text>
-              <Text style={styles.lobbyMeta}>{lobby.status}</Text>
+        {lobbies.map((lobby) => {
+          const capacity = `${lobby.participants.length}/${lobby.maxSize} joined`;
+          const meta = lobby.statusNote ? `${lobby.statusNote} • ${capacity}` : capacity;
+
+          return (
+            <View key={lobby.id} style={styles.lobbyCard}>
+              <View>
+                <Text style={styles.lobbyName}>{lobby.name}</Text>
+                <Text style={styles.lobbyMeta}>{meta}</Text>
+              </View>
+              <View style={styles.buyInPill}>
+                <Text style={styles.buyInValue}>{lobby.buyIn}</Text>
+                <Text style={styles.buyInLabel}>GP</Text>
+              </View>
             </View>
-            <View style={styles.buyInPill}>
-              <Text style={styles.buyInValue}>{lobby.buyIn}</Text>
-              <Text style={styles.buyInLabel}>GP</Text>
-            </View>
-          </View>
-        ))}
+          );
+        })}
       </View>
 
       <View style={styles.footerNote}>
@@ -117,6 +145,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 40,
   },
+  headerActions: {
+    alignItems: 'flex-end',
+  },
   brand: {
     color: '#FFFFFF',
     fontSize: 28,
@@ -143,6 +174,19 @@ const styles = StyleSheet.create({
     color: '#1CE783',
     fontSize: 18,
     fontWeight: '700',
+  },
+  signOutButton: {
+    marginTop: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  signOutLabel: {
+    color: '#9088B4',
+    fontSize: 13,
+    fontWeight: '600',
   },
   actionRow: {
     flexDirection: 'row',
