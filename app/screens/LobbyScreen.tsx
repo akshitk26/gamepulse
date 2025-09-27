@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,21 +12,26 @@ import {
 } from 'react-native';
 import { supabase } from '../supabase';
 
-type GameRow = { id: string; league: string; home: string; away: string; start_time: string };
-
 type LobbyRow = {
   id: string;
   code: string;
   buy_in: number;
   status: 'waiting' | 'live' | 'finished' | 'cancelled';
-  game: GameRow | null;
+  game: {
+    id: string;
+    league: string;
+    home: string;
+    away: string;
+    start_time: string;
+  } | null;
 };
 
 type Props = {
   onEnterLobby?: (lobbyId: string) => void;
+  onCreateLobby?: () => void;
 };
 
-const LobbyScreen: React.FC<Props> = ({ onEnterLobby }) => {
+const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
   const [username, setUsername] = useState<string | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
 
@@ -34,9 +39,6 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby }) => {
   const [loading, setLoading] = useState(true);
 
   const [codeInput, setCodeInput] = useState('');
-  const [games, setGames] = useState<GameRow[]>([]);
-  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
 
   const loadUser = useCallback(async () => {
@@ -76,30 +78,13 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby }) => {
     setLobbies(rows);
   }, []);
 
-  const loadGames = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('games')
-      .select('id, league, home, away, start_time')
-      .gte('start_time', new Date().toISOString())
-      .order('start_time', { ascending: true })
-      .limit(10);
-
-    if (error) throw error;
-
-    const rows = (data ?? []) as GameRow[];
-    setGames(rows);
-    if (rows.length) {
-      setSelectedGameId((prev) => prev ?? rows[0].id);
-    }
-  }, []);
-
   useEffect(() => {
     let isMounted = true;
 
     (async () => {
       try {
         setLoading(true);
-        await Promise.all([loadUser(), loadLobbies(), loadGames()]);
+        await Promise.all([loadUser(), loadLobbies()]);
       } catch (e) {
         if (isMounted) Alert.alert('Error', e instanceof Error ? e.message : String(e));
       } finally {
@@ -118,7 +103,7 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby }) => {
       isMounted = false;
       channel.unsubscribe();
     };
-  }, [loadGames, loadLobbies, loadUser]);
+  }, [loadLobbies, loadUser]);
 
   const joinByCode = useCallback(async () => {
     try {
@@ -135,6 +120,15 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby }) => {
       const lobbyId = (Array.isArray(data) ? data?.[0]?.lobby_id : data?.lobby_id) as string | undefined;
       if (!lobbyId) throw new Error('Lobby not found');
 
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+      if (userErr) throw userErr;
+      const userId = userData.user?.id;
+      if (!userId) throw new Error('No authenticated user');
+
+      await supabase
+        .from('lobby_players')
+        .upsert({ lobby_id: lobbyId, user_id: userId }, { onConflict: 'lobby_id,user_id' });
+
       onEnterLobby?.(lobbyId);
     } catch (e) {
       Alert.alert('Join failed', e instanceof Error ? e.message : String(e));
@@ -142,77 +136,6 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby }) => {
       setJoining(false);
     }
   }, [codeInput, onEnterLobby]);
-
-  const joinFromList = useCallback(
-    async (lobbyId: string) => {
-      try {
-        setJoining(true);
-        const { data, error } = await supabase.auth.getUser();
-        if (error) throw error;
-        const userId = data.user?.id;
-        if (!userId) throw new Error('No authenticated user');
-
-        const { error: insertErr } = await supabase
-          .from('lobby_players')
-          .insert({ lobby_id: lobbyId, user_id: userId });
-
-        if (insertErr && !String(insertErr.message).includes('duplicate key')) throw insertErr;
-        onEnterLobby?.(lobbyId);
-      } catch (e) {
-        Alert.alert('Join failed', e instanceof Error ? e.message : String(e));
-      } finally {
-        setJoining(false);
-      }
-    },
-    [onEnterLobby]
-  );
-
-  const createLobby = useCallback(async () => {
-    try {
-      setCreating(true);
-      if (!selectedGameId) {
-        Alert.alert('Create lobby', 'Pick a game first.');
-        return;
-      }
-
-      const { data, error } = await supabase.rpc('create_lobby', {
-        p_game_id: selectedGameId,
-        p_buy_in: 0,
-        p_max_players: 5,
-      });
-      if (error) throw error;
-
-      const result = Array.isArray(data) ? data[0] : data;
-      const lobbyId = result?.lobby_id as string | undefined;
-      if (!lobbyId) throw new Error('Unable to create lobby');
-
-      onEnterLobby?.(lobbyId);
-    } catch (e) {
-      Alert.alert('Create failed', e instanceof Error ? e.message : String(e));
-    } finally {
-      setCreating(false);
-    }
-  }, [onEnterLobby, selectedGameId]);
-
-  const cycleGame = useCallback(() => {
-    if (!games.length) return;
-    const currentIndex = games.findIndex((g) => g.id === selectedGameId);
-    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % games.length : 0;
-    setSelectedGameId(games[nextIndex].id);
-  }, [games, selectedGameId]);
-
-  const selectedGame = useMemo(
-    () => games.find((g) => g.id === selectedGameId) ?? null,
-    [games, selectedGameId]
-  );
-
-  const gameLabel = useCallback((g: GameRow) => {
-    const time = new Date(g.start_time).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    return `${g.league} • ${g.away} @ ${g.home} • ${time}`;
-  }, []);
 
   return (
     <View style={styles.container}>
@@ -257,36 +180,21 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby }) => {
 
       <View style={styles.createBox}>
         <Text style={styles.sectionTitle}>Create your lobby</Text>
-        {loading ? (
-          <ActivityIndicator />
-        ) : games.length === 0 ? (
-          <Text style={styles.sectionSubtitle}>No upcoming games. Add some in the database.</Text>
-        ) : (
-          <>
-            <TouchableOpacity style={styles.gamePicker} onPress={cycleGame}>
-              <Text style={styles.gameText}>
-                {selectedGame ? gameLabel(selectedGame) : 'Pick a game'}
-              </Text>
-              <Text style={styles.gameHint}>tap to change</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionButton, styles.primaryButton]}
-              onPress={createLobby}
-              disabled={creating}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.actionLabel, styles.primaryLabel]}>
-                {creating ? 'Creating…' : 'Create Lobby'}
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
+        <Text style={styles.sectionSubtitle}>
+          Set a buy-in and pick a matchup on the next screen.
+        </Text>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.primaryButton]}
+          onPress={onCreateLobby}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.actionLabel, styles.primaryLabel]}>Open Creator</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.lobbySection}>
         <Text style={styles.sectionTitle}>Current Lobbies</Text>
-        <Text style={styles.sectionSubtitle}>Tap a lobby to join.</Text>
+        <Text style={styles.sectionSubtitle}>Fresh lobbies appear here while hosts wait.</Text>
 
         {loading ? (
           <ActivityIndicator />
@@ -303,12 +211,7 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby }) => {
                 : 'TBD';
 
               return (
-                <TouchableOpacity
-                  style={styles.lobbyCard}
-                  activeOpacity={0.9}
-                  onPress={() => joinFromList(item.id)}
-                  disabled={joining}
-                >
+                <View style={styles.lobbyCard}>
                   <View>
                     <Text style={styles.lobbyName}>{matchup}</Text>
                     <Text style={styles.lobbyMeta}>
@@ -319,7 +222,7 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby }) => {
                     <Text style={styles.buyInValue}>{item.buy_in}</Text>
                     <Text style={styles.buyInLabel}>GP</Text>
                   </View>
-                </TouchableOpacity>
+                </View>
               );
             }}
           />
@@ -389,16 +292,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(12,12,21,0.9)',
   },
   createBox: { marginBottom: 24, gap: 12 },
-  gamePicker: {
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(12,12,21,0.9)',
-  },
-  gameText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
-  gameHint: { color: '#6F6895', fontSize: 12, marginTop: 2 },
   actionButton: {
     borderRadius: 16,
     paddingVertical: 14,

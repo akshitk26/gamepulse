@@ -1,56 +1,153 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { supabase } from '../supabase';
+
+type GameRow = {
+  id: string;
+  league: string;
+  home: string;
+  away: string;
+  start_time: string;
+};
 
 type BetpartyCreationScreenProps = {
   onBack?: () => void;
-  onSubmit?: (payload: { lobbyName: string; buyIn: number; maxSize: number }) => void;
+  onCreated?: (lobbyId: string) => void;
 };
 
-const BetpartyCreationScreen: React.FC<BetpartyCreationScreenProps> = ({
-  onBack,
-  onSubmit,
-}) => {
-  const [lobbyName, setLobbyName] = useState('');
-  const [buyIn, setBuyIn] = useState<number>(20);
-  const [maxSize, setMaxSize] = useState<number>(10);
+const DEFAULT_MAX_PLAYERS = 5;
 
-  const canSubmit = useMemo(
-    () => lobbyName.trim().length > 0 && buyIn > 0 && maxSize >= 2,
-    [lobbyName, buyIn, maxSize]
-  );
+const BetpartyCreationScreen: React.FC<BetpartyCreationScreenProps> = ({ onBack, onCreated }) => {
+  const [buyIn, setBuyIn] = useState<number>(20);
+  const [games, setGames] = useState<GameRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creatingFor, setCreatingFor] = useState<string | null>(null);
+
+  const loadGames = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('games')
+      .select('id, league, home, away, start_time')
+      .gte('start_time', new Date().toISOString())
+      .order('start_time', { ascending: true })
+      .limit(25);
+
+    if (error) throw error;
+    setGames((data ?? []) as GameRow[]);
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        await loadGames();
+      } catch (e) {
+        Alert.alert('Load failed', e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [loadGames]);
 
   const adjustBuyIn = (delta: number) => {
-    setBuyIn((prev) => {
-      const next = Math.max(0, prev + delta);
-      return Math.round(next / 10) * 10;
-    });
+    setBuyIn((prev) => Math.max(0, prev + delta));
   };
 
-  const adjustMaxSize = (delta: number) => {
-    setMaxSize((prev) => {
-      const next = Math.max(2, prev + delta);
-      return next;
+  const formatGameLabel = useCallback((game: GameRow) => {
+    const start = new Date(game.start_time).toLocaleString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      month: 'short',
+      day: 'numeric',
     });
-  };
+    return `${game.league} • ${game.away} @ ${game.home} • ${start}`;
+  }, []);
 
-  const handleSubmit = () => {
-    if (!canSubmit) {
-      return;
+  const generateLobbyCode = () => {
+    const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i += 1) {
+      const idx = Math.floor(Math.random() * alphabet.length);
+      code += alphabet[idx];
     }
-
-    onSubmit?.({
-      lobbyName: lobbyName.trim(),
-      buyIn,
-      maxSize,
-    });
+    return code;
   };
+
+  const handlePickGame = async (gameId: string) => {
+    try {
+      setCreatingFor(gameId);
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+      if (userErr) throw userErr;
+      const userId = userData.user?.id;
+      if (!userId) throw new Error('No authenticated user');
+
+      const code = generateLobbyCode();
+
+      const { data: lobbyData, error: lobbyErr } = await supabase
+        .from('lobbies')
+        .insert({
+          owner_id: userId,
+          game_id: gameId,
+          buy_in: buyIn,
+          code,
+          status: 'waiting',
+          max_players: DEFAULT_MAX_PLAYERS,
+        })
+        .select('id')
+        .single();
+      if (lobbyErr) throw lobbyErr;
+
+      const lobbyId = lobbyData?.id as string | undefined;
+      if (!lobbyId) throw new Error('Lobby id missing after create');
+
+      await supabase
+        .from('lobby_players')
+        .upsert({ lobby_id: lobbyId, user_id: userId }, { onConflict: 'lobby_id,user_id' });
+
+      onCreated?.(lobbyId);
+    } catch (e) {
+      Alert.alert('Create failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setCreatingFor(null);
+    }
+  };
+
+  const renderGame = ({ item }: { item: GameRow }) => {
+    const busy = creatingFor === item.id;
+    return (
+      <TouchableOpacity
+        style={[styles.gameCard, busy && styles.gameCardDisabled]}
+        onPress={() => handlePickGame(item.id)}
+        disabled={busy}
+        activeOpacity={0.85}
+      >
+        <View style={styles.gameCardHeader}>
+          <Text style={styles.gameLeague}>{item.league}</Text>
+          <Text style={styles.gameTime}>
+            {new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        </View>
+        <Text style={styles.gameMatch}>
+          {item.away} @ {item.home}
+        </Text>
+        <Text style={styles.gameSubtitle}>{formatGameLabel(item)}</Text>
+        <View style={styles.gameFooter}>
+          <Text style={styles.gameBuyIn}>{buyIn} GP buy-in</Text>
+          {busy && <ActivityIndicator size="small" color="#1CE783" />}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const buyInLabel = useMemo(() => `${buyIn} GP`, [buyIn]);
 
   return (
     <View style={styles.container}>
@@ -60,27 +157,14 @@ const BetpartyCreationScreen: React.FC<BetpartyCreationScreenProps> = ({
       <View style={styles.greenGlow} />
 
       <View style={styles.headerRow}>
-        <TouchableOpacity
-          onPress={onBack}
-          activeOpacity={0.85}
-          style={styles.backButton}
-        >
+        <TouchableOpacity onPress={onBack} activeOpacity={0.85} style={styles.backButton}>
           <Text style={styles.backLabel}>{'< Back'}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Create Betparty</Text>
         <View style={styles.headerSpacer} />
       </View>
 
-      <View style={styles.formCard}>
-        <Text style={styles.sectionLabel}>Lobby Title</Text>
-        <TextInput
-          value={lobbyName}
-          onChangeText={setLobbyName}
-          placeholder="Name your Betparty"
-          placeholderTextColor="#635F81"
-          style={styles.input}
-        />
-
+      <View style={styles.buyInCard}>
         <Text style={styles.sectionLabel}>Buy-in (GamePoints)</Text>
         <View style={styles.stepperRow}>
           <TouchableOpacity
@@ -91,7 +175,7 @@ const BetpartyCreationScreen: React.FC<BetpartyCreationScreenProps> = ({
             <Text style={styles.stepperLabel}>-10</Text>
           </TouchableOpacity>
           <View style={styles.stepperValueBox}>
-            <Text style={styles.stepperValue}>{buyIn} GP</Text>
+            <Text style={styles.stepperValue}>{buyInLabel}</Text>
           </View>
           <TouchableOpacity
             onPress={() => adjustBuyIn(10)}
@@ -101,48 +185,26 @@ const BetpartyCreationScreen: React.FC<BetpartyCreationScreenProps> = ({
             <Text style={styles.stepperLabel}>+10</Text>
           </TouchableOpacity>
         </View>
-
-        <Text style={styles.sectionLabel}>Lobby Max Size</Text>
-        <View style={styles.stepperRow}>
-          <TouchableOpacity
-            onPress={() => adjustMaxSize(-1)}
-            style={[styles.stepperButton, styles.stepperButtonLeft]}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.stepperLabel}>-</Text>
-          </TouchableOpacity>
-          <View style={styles.stepperValueBox}>
-            <Text style={styles.stepperValue}>{maxSize} Players</Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => adjustMaxSize(1)}
-            style={[styles.stepperButton, styles.stepperButtonRight]}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.stepperLabel}>+</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.buyInHint}>Tap a matchup below to launch your waiting room.</Text>
       </View>
 
-      <TouchableOpacity
-        style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
-        onPress={handleSubmit}
-        disabled={!canSubmit}
-        activeOpacity={0.85}
-      >
-        <View style={styles.submitContent}>
-          <Text
-            style={[styles.submitLabel, !canSubmit && styles.submitLabelDisabled]}
-          >
-            Create Betparty
-          </Text>
-          <Text
-            style={[styles.submitArrow, !canSubmit && styles.submitLabelDisabled]}
-          >
-            -&gt;
-          </Text>
+      {loading ? (
+        <View style={styles.loaderWrap}>
+          <ActivityIndicator size="large" color="#1CE783" />
         </View>
-      </TouchableOpacity>
+      ) : (
+        <FlatList
+          data={games}
+          keyExtractor={(item) => item.id}
+          renderItem={renderGame}
+          contentContainerStyle={{ paddingBottom: 48, gap: 16 }}
+          ListEmptyComponent={() => (
+            <Text style={styles.emptyText}>
+              No upcoming games found. Add some fixtures in Supabase to get started.
+            </Text>
+          )}
+        />
+      )}
     </View>
   );
 };
@@ -198,101 +260,125 @@ const styles = StyleSheet.create({
   headerSpacer: {
     width: 48,
   },
-  formCard: {
+  buyInCard: {
     backgroundColor: 'rgba(12, 12, 21, 0.92)',
-    borderRadius: 24,
+    borderRadius: 20,
     padding: 24,
+    gap: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
-    gap: 18,
+    marginBottom: 24,
   },
   sectionLabel: {
-    color: '#9088B4',
+    color: '#6F6895',
     fontSize: 13,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  input: {
-    height: 52,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    backgroundColor: 'rgba(5, 3, 10, 0.8)',
-    paddingHorizontal: 18,
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
   },
   stepperButton: {
     flex: 1,
-    height: 52,
+    paddingVertical: 14,
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    backgroundColor: 'rgba(5, 3, 10, 0.8)',
+    backgroundColor: 'rgba(128, 0, 255, 0.15)',
   },
   stepperButtonLeft: {
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
+    borderRightWidth: 1,
+    borderColor: '#8000FF',
   },
   stepperButtonRight: {
-    borderTopRightRadius: 16,
-    borderBottomRightRadius: 16,
+    borderTopRightRadius: 14,
+    borderBottomRightRadius: 14,
+    borderLeftWidth: 1,
+    borderColor: '#8000FF',
   },
   stepperLabel: {
-    color: '#1CE783',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  stepperValueBox: {
-    paddingHorizontal: 20,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    backgroundColor: 'rgba(12, 12, 21, 0.9)',
-  },
-  stepperValue: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
-    letterSpacing: 0.4,
   },
-  submitButton: {
+  stepperValueBox: {
+    minWidth: 120,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(5, 3, 10, 0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  stepperValue: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  buyInHint: {
+    color: '#9088B4',
+    fontSize: 13,
+    marginTop: 12,
+  },
+  loaderWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    color: '#6F6895',
+    fontSize: 14,
+    textAlign: 'center',
     marginTop: 32,
-    backgroundColor: '#1CE783',
+  },
+  gameCard: {
+    backgroundColor: 'rgba(12, 12, 21, 0.92)',
     borderRadius: 20,
-    paddingVertical: 18,
-    paddingHorizontal: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    gap: 8,
   },
-  submitButtonDisabled: {
-    backgroundColor: 'rgba(28, 231, 131, 0.3)',
+  gameCardDisabled: {
+    opacity: 0.7,
   },
-  submitContent: {
+  gameCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  submitLabel: {
-    color: '#05030A',
-    fontSize: 16,
+  gameLeague: {
+    color: '#1CE783',
+    fontSize: 14,
     fontWeight: '700',
-    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
-  submitLabelDisabled: {
-    color: 'rgba(5, 3, 10, 0.5)',
+  gameTime: {
+    color: '#9088B4',
+    fontSize: 14,
   },
-  submitArrow: {
-    color: '#05030A',
+  gameMatch: {
+    color: '#FFFFFF',
     fontSize: 18,
+    fontWeight: '700',
+  },
+  gameSubtitle: {
+    color: '#6F6895',
+    fontSize: 13,
+  },
+  gameFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  gameBuyIn: {
+    color: '#1CE783',
+    fontSize: 15,
     fontWeight: '700',
   },
 });
