@@ -1,5 +1,13 @@
 {
   "dependencies": {
+    "@react-native-firebase/app": "^23.4.0",
+    "@react-native-firebase/auth": "^23.4.0",
+    "@react-native-firebase/firestore": "^23.4.0",
+    "@react-native-google-signin/google-signin": "^16.0.0",
+    "expo": "^54.0.10",
+    "expo-auth-session": "~7.0.8",
+    "expo-crypto": "~15.0.7",
+    "expo-web-browser": "~15.0.7",
     "firebase": "^12.3.0"
   }
 }
