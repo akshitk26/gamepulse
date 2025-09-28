@@ -158,8 +158,11 @@ const BetpartyCreationScreen: React.FC<BetpartyCreationScreenProps> = ({ onBack,
             lobby_id: lobbyId,
             user_id: userId,
             joined_at: new Date().toISOString(),
+            points_earned: 0,
+            correct_bets: 0,
+            questions_attempted: 0,
           },
-          { onConflict: 'lobby_id,user_id' }
+          { onConflict: 'lobby_id,user_id', ignoreDuplicates: true }
         );
       if (membershipErr) throw membershipErr;
 

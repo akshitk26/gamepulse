@@ -180,8 +180,15 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
       const { error: insertErr } = await supabase
         .from('lobby_players')
         .upsert(
-          { lobby_id: lobby.id, user_id: userId, joined_at: new Date().toISOString() },
-          { onConflict: 'lobby_id,user_id' }
+          {
+            lobby_id: lobby.id,
+            user_id: userId,
+            joined_at: new Date().toISOString(),
+            points_earned: 0,
+            correct_bets: 0,
+            questions_attempted: 0,
+          },
+          { onConflict: 'lobby_id,user_id', ignoreDuplicates: true }
         );
       if (insertErr) throw insertErr;
 
@@ -227,8 +234,15 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
         const { error: insertErr } = await supabase
           .from('lobby_players')
           .upsert(
-            { lobby_id: lobby.id, user_id: userId, joined_at: new Date().toISOString() },
-            { onConflict: 'lobby_id,user_id' }
+            {
+              lobby_id: lobby.id,
+              user_id: userId,
+              joined_at: new Date().toISOString(),
+              points_earned: 0,
+              correct_bets: 0,
+              questions_attempted: 0,
+            },
+            { onConflict: 'lobby_id,user_id', ignoreDuplicates: true }
           );
         if (insertErr) throw insertErr;
 

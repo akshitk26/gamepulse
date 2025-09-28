@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../supabase';
 import { parseSupabaseError } from '../utils/parseSupabaseError';
 
@@ -36,6 +37,8 @@ type LiveQuestion = {
 
 const QUESTION_DURATION_MS = 20_000;
 const CORRECT_POINTS = 20;
+const WRONG_POINTS = -10;
+const STATS_DEFAULT = { points: 0, correct: 0, attempted: 0 } as const;
 
 /** Demo quick facts (flip card at bottom) */
 const FACTS_BILLS_CHIEFS = [
@@ -65,20 +68,6 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
   const [lobby, setLobby] = useState<LobbyRow | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-
-  /** kickoff countdown (optional) */
-  const [countdownMs, setCountdownMs] = useState<number | null>(null);
-  useEffect(() => {
-    if (!lobby?.beginning_time) {
-      setCountdownMs(null);
-      return;
-    }
-    const start = new Date(lobby.beginning_time).getTime();
-    const tick = () => setCountdownMs(Math.max(0, start - Date.now()));
-    tick();
-    const id = setInterval(tick, 200);
-    return () => clearInterval(id);
-  }, [lobby?.beginning_time]);
 
   /** quick fact flip card (bottom) */
   const facts = useMemo(() => FACTS_BILLS_CHIEFS, []);
@@ -111,18 +100,41 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
   const [qExpiresAt, setQExpiresAt] = useState<number | null>(null);
   const [answeredKey, setAnsweredKey] = useState<string | null>(null);
   const [answering, setAnswering] = useState(false);
+  const [stats, setStats] = useState({ ...STATS_DEFAULT });
   const [feedback, setFeedback] = useState<{ text: string; kind: 'ok' | 'bad' } | null>(null);
 
   const lastQKeyRef = useRef<string>(''); // stable across realtime/poll callbacks
   const keyForQ = (q: any) => (q ? JSON.stringify(q) : 'null');
 
-  /** initial load + realtime + polling fallback */
-  useEffect(() => {
-    let alive = true;
-    let sawRealtime = false;
+  const refreshStats = useCallback(
+    async (uid: string | null | undefined) => {
+      if (!uid) {
+        setStats({ ...STATS_DEFAULT });
+        return;
+      }
+      const { data, error } = await supabase
+        .from('lobby_players')
+        .select('points_earned, correct_bets, questions_attempted')
+        .eq('lobby_id', lobbyId)
+        .eq('user_id', uid)
+        .maybeSingle();
+      if (!error && data) {
+        setStats({
+          points: data.points_earned ?? 0,
+          correct: data.correct_bets ?? 0,
+          attempted: data.questions_attempted ?? 0,
+        });
+      } else if (error && error.code === 'PGRST116') {
+        // no row yet
+        setStats({ ...STATS_DEFAULT });
+      }
+    },
+    [lobbyId]
+  );
 
-    const applyRow = (row: any) => {
-      setLobby((prev) => ({ ...(prev ?? {} as any), ...row }));
+  const applyRow = useCallback(
+    (row: any) => {
+      setLobby((prev) => ({ ...(prev ?? ({} as any)), ...row }));
       const incoming = row?.current_question ?? null;
       const nextKey = keyForQ(incoming);
       if (nextKey !== lastQKeyRef.current) {
@@ -136,9 +148,15 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
           setQExpiresAt(null);
         }
       }
-      // handle status close
       if (row?.status && row.status !== 'active') onBack();
-    };
+    },
+    [onBack]
+  );
+
+  /** initial load + realtime + polling fallback */
+  useEffect(() => {
+    let alive = true;
+    let sawRealtime = false;
 
     const load = async () => {
       try {
@@ -154,8 +172,10 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
         if (error) throw error;
         if (ue) throw ue;
         if (!alive) return;
-        setCurrentUserId(u.user?.id ?? null);
-        applyRow(row);
+        const uid = u.user?.id ?? null;
+        setCurrentUserId(uid);
+        refreshStats(uid);
+        if (row) applyRow(row);
       } catch (e) {
         if (alive) Alert.alert('Unable to load lobby', parseSupabaseError(e));
       } finally {
@@ -194,7 +214,7 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
       ch.unsubscribe();
       clearInterval(pollId);
     };
-  }, [lobbyId, onBack]);
+  }, [applyRow, lobbyId, onBack, refreshStats]);
 
   /** auto-hide when expired */
   useEffect(() => {
@@ -207,6 +227,10 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
     const id = setTimeout(() => setActiveQ(null), remain);
     return () => clearTimeout(id);
   }, [qExpiresAt]);
+
+  useEffect(() => {
+    refreshStats(currentUserId);
+  }, [currentUserId, refreshStats]);
 
   /** leave (host returns lobby to waiting) */
   const isHost = currentUserId && lobby?.owner_id === currentUserId;
@@ -235,6 +259,7 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
     try {
       const isCorrect =
         (choice || '').toLowerCase() === (activeQ.Answer || '').toLowerCase();
+      const delta = isCorrect ? CORRECT_POINTS : WRONG_POINTS;
 
       // Read current stats (simple approach; for racing use a SECURITY DEFINER RPC)
       const { data: row, error: readErr } = await supabase
@@ -245,7 +270,7 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
         .single();
       if (readErr) throw readErr;
 
-      const nextPoints = (row?.points_earned ?? 0) + (isCorrect ? CORRECT_POINTS : 0);
+      const nextPoints = (row?.points_earned ?? 0) + delta;
       const nextCorrect = (row?.correct_bets ?? 0) + (isCorrect ? 1 : 0);
       const nextAttempted = (row?.questions_attempted ?? 0) + 1;
 
@@ -260,8 +285,23 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
         .eq('user_id', currentUserId);
       if (updErr) throw updErr;
 
+      const { error: logErr } = await supabase.from('lobby_answers').insert({
+        lobby_id: lobbyId,
+        user_id: currentUserId,
+        question_key: qKey,
+        question_text: activeQ.Question,
+        answer: choice,
+        is_correct: isCorrect,
+        points_delta: delta,
+      });
+      if (logErr) console.warn('log answer failed', logErr.message ?? logErr);
+
+      setStats({ points: nextPoints, correct: nextCorrect, attempted: nextAttempted });
+
       setFeedback({
-        text: isCorrect ? `✔ Correct! +${CORRECT_POINTS} GP` : '✗ Incorrect',
+        text: isCorrect
+          ? `✔ Correct! +${CORRECT_POINTS} GP`
+          : `✗ Incorrect −${Math.abs(WRONG_POINTS)} GP`,
         kind: isCorrect ? 'ok' : 'bad',
       });
       setTimeout(() => setFeedback(null), 1500);
@@ -286,10 +326,6 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
     );
   }
 
-  const secondsRemaining =
-    countdownMs !== null ? Math.ceil(countdownMs / 1000) : null;
-  const showCountdown = secondsRemaining !== null && secondsRemaining > 0;
-
   const qRemainSec =
     activeQ && qExpiresAt
       ? Math.max(0, Math.ceil((qExpiresAt - Date.now()) / 1000))
@@ -306,12 +342,20 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
         <Text style={styles.subText}>
           Lobby {lobby.code} • Buy-in {lobby.buy_in} GP
         </Text>
-        {showCountdown && (
-          <View style={styles.countdownBubble}>
-            <Text style={styles.countdownLabel}>Kickoff in</Text>
-            <Text style={styles.countdownValue}>{secondsRemaining}</Text>
+        <View style={styles.scoreRow}>
+          <View style={styles.scorePill}>
+            <Text style={styles.scoreLabel}>Points</Text>
+            <Text style={styles.scoreValue}>{stats.points}</Text>
           </View>
-        )}
+          <View style={styles.scorePill}>
+            <Text style={styles.scoreLabel}>Correct</Text>
+            <Text style={styles.scoreValue}>{stats.correct}</Text>
+          </View>
+          <View style={styles.scorePill}>
+            <Text style={styles.scoreLabel}>Attempted</Text>
+            <Text style={styles.scoreValue}>{stats.attempted}</Text>
+          </View>
+        </View>
       </View>
 
       {activeQ ? (
@@ -324,7 +368,19 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
           </View>
 
           <Text style={styles.qTitle}>{activeQ.Question}</Text>
-          {!!activeQ.Tip && <Text style={styles.qTip}>{activeQ.Tip}</Text>}
+
+          {/* HINT ROW WITH ICON */}
+          {!!activeQ.Tip && (
+            <View style={styles.qTipRow}>
+              <MaterialCommunityIcons
+                name="lightbulb-on-outline"
+                size={16}
+                color="#FFD966"
+                style={{ marginRight: 6 }}
+              />
+              <Text style={styles.qTip}>{activeQ.Tip}</Text>
+            </View>
+          )}
 
           <View style={styles.qButtonsRow}>
             <TouchableOpacity
@@ -413,16 +469,28 @@ const styles = StyleSheet.create({
   gameTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', textAlign: 'center' },
   subText: { color: '#A895E6', fontSize: 13, marginTop: 4 },
 
-  countdownBubble: {
+  scoreRow: {
+    flexDirection: 'row',
+    gap: 12,
     marginTop: 12,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignSelf: 'stretch',
+  },
+  scorePill: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    paddingVertical: 10,
     alignItems: 'center',
   },
-  countdownLabel: { color: '#E6DFFF', fontSize: 11, letterSpacing: 1 },
-  countdownValue: { color: '#FFFFFF', fontSize: 24, fontWeight: '800' },
+  scoreLabel: {
+    color: '#A895E6',
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  scoreValue: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginTop: 4 },
 
   /* question card */
   qCard: {
@@ -451,7 +519,15 @@ const styles = StyleSheet.create({
   },
   timerText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   qTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', marginTop: 8 },
-  qTip: { color: '#D8D0FF', fontSize: 13, marginTop: 6 },
+
+  /* HINT ROW + TEXT */
+  qTipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  qTip: { color: '#D8D0FF', fontSize: 13, flexShrink: 1 },
+
   qButtonsRow: { flexDirection: 'row', gap: 12, marginTop: 14 },
   qBtn: { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 1 },
   qBtnLabel: { fontSize: 16, fontWeight: '800' },
