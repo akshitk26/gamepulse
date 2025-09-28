@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>GamePulse Video Controller</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: system-ui, sans-serif; background: #080514; color: #f6f2ff; margin: 0; padding: 24px; }
+      h1 { margin-top: 0; font-size: 20px; }
+      #container { max-width: 720px; margin: auto; display: flex; flex-direction: column; gap: 16px; }
+      .card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 16px; }
+      #status { font-weight: 600; letter-spacing: 0.05em; }
+      .label { color: #9f8cff; text-transform: uppercase; font-size: 12px; letter-spacing: 0.12em; }
+      iframe { width: 100%; aspect-ratio: 16 / 9; border: none; border-radius: 16px; }
+      small { color: #7c6bbd; }
+      button { padding: 10px 16px; border-radius: 10px; border: none; background: #393066; color: #fff; font-weight: 600; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <h1>GamePulse • Video Sync</h1>
+      <div class="card">
+        <div class="label">Lobby</div>
+        <div id="lobbyId">-</div>
+        <div class="label" style="margin-top:12px;">Status</div>
+        <div id="status">Connecting…</div>
+        <small>Tip: keep this page visible on the presentation laptop.</small>
+      </div>
+      <div id="player"></div>
+      <button id="pauseBtn" type="button">Pause Video</button>
+    </div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <script>
+      const DEFAULTS = {
+        supabaseUrl: 'https://xtyufkrsudoktgxyharf.supabase.co',
+        supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0eXVma3JzdWRva3RneHloYXJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg5NDQxMTQsImV4cCI6MjA3NDUyMDExNH0.Hj-3YKXY2Q4A1v0lcXbaWM29EDc9dCgMFcAg_2h8Nn0',
+        lobbyId: '', // provide ?lobby=<uuid>
+        videoId: '0fYVg2rM2jA', // replace with your clip id
+        startSeconds: 0, // offset seconds for the drive
+      };
+
+      const params = new URLSearchParams(window.location.search);
+      const SUPABASE_URL = params.get('url') || DEFAULTS.supabaseUrl;
+      const SUPABASE_KEY = params.get('key') || DEFAULTS.supabaseAnonKey;
+      const LOBBY_ID = params.get('lobby') || DEFAULTS.lobbyId;
+      const VIDEO_ID = params.get('video') || DEFAULTS.videoId;
+      const START_SECONDS = Number(params.get('offset') || DEFAULTS.startSeconds);
+
+      if (!LOBBY_ID) {
+        alert('Provide ?lobby=<uuid> in the URL to bind this controller to a lobby.');
+      }
+
+      document.getElementById('lobbyId').textContent = LOBBY_ID || 'Missing';
+
+      const statusEl = document.getElementById('status');
+      const pauseBtn = document.getElementById('pauseBtn');
+
+      let player;
+      let lastLobbyStatus = 'unknown';
+
+      window.onYouTubeIframeAPIReady = function () {
+        player = new YT.Player('player', {
+          videoId: VIDEO_ID,
+          playerVars: { playsinline: 1, controls: 1 },
+          events: {
+            onReady: () => {
+              player.seekTo(START_SECONDS, true);
+              player.pauseVideo();
+              statusEl.textContent = 'Ready';
+            },
+          },
+        });
+      };
+
+      const { createClient } = supabase;
+      const supa = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+      async function fetchLobby() {
+        if (!LOBBY_ID) return;
+        const { data, error } = await supa
+          .from('lobbies')
+          .select('id, status, beginning_time')
+          .eq('id', LOBBY_ID)
+          .maybeSingle();
+        if (!error && data) handleLobbyUpdate(data);
+      }
+
+      function playVideo() {
+        if (!player || typeof player.playVideo !== 'function') return;
+        player.seekTo(START_SECONDS, true);
+        player.playVideo();
+      }
+
+      function pauseVideo() {
+        if (!player || typeof player.pauseVideo !== 'function') return;
+        player.pauseVideo();
+      }
+
+      function handleLobbyUpdate(lobby) {
+        lastLobbyStatus = lobby.status;
+        statusEl.textContent = lobby.status.toUpperCase();
+        if (lobby.status === 'active') {
+          playVideo();
+        } else {
+          pauseVideo();
+        }
+      }
+
+      supa
+        .channel(`controller-${LOBBY_ID}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'lobbies', filter: `id=eq.${LOBBY_ID}` }, (payload) => {
+          if (payload.new) handleLobbyUpdate(payload.new);
+        })
+        .subscribe();
+
+      fetchLobby();
+
+      pauseBtn.addEventListener('click', () => {
+        pauseVideo();
+      });
+    </script>
+  </body>
+</html>
