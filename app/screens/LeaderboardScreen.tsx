@@ -12,6 +12,7 @@ type LeaderRow = {
   payout: number;
   profit: number;
   new_balance: number;
+  accuracy?: number;
 };
 
 type Props = {
@@ -70,13 +71,17 @@ const LeaderboardScreen: React.FC<Props> = ({ lobbyId, onExit }) => {
     };
   }, [lobbyId]);
 
-  const renderItem = ({ item, index }: { item: LeaderRow; index: number }) => (
+  const renderItem = ({ item, index }: { item: LeaderRow; index: number }) => {
+    const attempts = item.questions_attempted ?? 0;
+    const correct = item.correct_bets ?? 0;
+    const accuracyPct = attempts > 0 ? Math.round(((item.accuracy ?? (correct / attempts || 0)) * 100)) : 0;
+    return (
     <View style={[styles.row, index === 0 && styles.rowFirst]}>
       <Text style={styles.rank}>{index + 1}</Text>
       <View style={{ flex: 1 }}>
         <Text style={styles.name}>{item.username ?? 'Player'}</Text>
         <Text style={styles.userId}>{item.user_id.slice(0, 8)}</Text>
-        <Text style={styles.meta}>Points: {item.points_earned}</Text>
+        <Text style={styles.meta}>Accuracy {accuracyPct}% • {attempts} attempts</Text>
       </View>
       <View style={{ alignItems: 'flex-end' }}>
         <Text style={[styles.profit, item.profit >= 0 ? styles.profitPositive : styles.profitNegative]}>
@@ -86,6 +91,7 @@ const LeaderboardScreen: React.FC<Props> = ({ lobbyId, onExit }) => {
       </View>
     </View>
   );
+  };
 
   const me = leaders.find((row) => row.user_id === currentUserId);
 
@@ -127,7 +133,10 @@ const LeaderboardScreen: React.FC<Props> = ({ lobbyId, onExit }) => {
           >
             {me.profit >= 0 ? '+' : ''}{me.profit} GP
           </Text>
-          <Text style={styles.resultSub}>Balance: {me.new_balance} GP</Text>
+          <Text style={styles.resultSub}>Balance {me.new_balance} GP</Text>
+          <Text style={styles.resultSub}>
+            Accuracy {me.questions_attempted ? Math.round(((me.accuracy ?? ((me.correct_bets ?? 0) / (me.questions_attempted ?? 1))) * 100)) : 0}% • {me.questions_attempted ?? 0} attempts
+          </Text>
         </View>
       )}
 

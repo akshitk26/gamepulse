@@ -40,7 +40,8 @@ type LiveQuestion = {
 const QUESTION_DURATION_MS = 10_000;
 const CORRECT_POINTS = 20;
 const WRONG_POINTS = -10;
-const STATS_DEFAULT = { points: 0, correct: 0, attempted: 0 } as const;
+type SessionStats = { points: number; correct: number; attempted: number };
+const STATS_DEFAULT: SessionStats = { points: 0, correct: 0, attempted: 0 };
 
 /** Demo quick facts (flip card at bottom) */
 const FACTS_BILLS_CHIEFS = [
@@ -103,8 +104,7 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
   const [qExpiresAt, setQExpiresAt] = useState<number | null>(null);
   const [answeredKey, setAnsweredKey] = useState<string | null>(null);
   const [answering, setAnswering] = useState(false);
-  const [stats, setStats] = useState({ ...STATS_DEFAULT });
-  const [feedback, setFeedback] = useState<{ text: string; kind: 'ok' | 'bad' } | null>(null);
+  const [stats, setStats] = useState<SessionStats>({ ...STATS_DEFAULT });
 
   const lastQKeyRef = useRef<string>(''); // stable across realtime/poll callbacks
   const keyForQ = (q: any) => (q ? JSON.stringify(q) : 'null');
@@ -315,14 +315,6 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
 
       setStats({ points: nextPoints, correct: nextCorrect, attempted: nextAttempted });
 
-      setFeedback({
-        text: isCorrect
-          ? `✔ Correct! +${CORRECT_POINTS} GP`
-          : `✗ Incorrect −${Math.abs(WRONG_POINTS)} GP`,
-        kind: isCorrect ? 'ok' : 'bad',
-      });
-      setTimeout(() => setFeedback(null), 1500);
-
       // hide this question for this client
       setAnsweredKey(qKey);
       setActiveQ(null);
@@ -355,23 +347,8 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
 
       <View style={styles.headerBlock}>
         <Text style={styles.gameTitle}>Questions will appear here as the game goes on</Text>
-        <Text style={styles.subText}>
-          Lobby {lobby.code} • Buy-in {lobby.buy_in} GP
-        </Text>
-        <View style={styles.scoreRow}>
-          <View style={styles.scorePill}>
-            <Text style={styles.scoreLabel}>Points</Text>
-            <Text style={styles.scoreValue}>{stats.points}</Text>
-          </View>
-          <View style={styles.scorePill}>
-            <Text style={styles.scoreLabel}>Correct</Text>
-            <Text style={styles.scoreValue}>{stats.correct}</Text>
-          </View>
-          <View style={styles.scorePill}>
-            <Text style={styles.scoreLabel}>Attempted</Text>
-            <Text style={styles.scoreValue}>{stats.attempted}</Text>
-          </View>
-        </View>
+        <Text style={styles.subText}>Lobby {lobby.code} • Buy-in {lobby.buy_in} GP</Text>
+        <Text style={styles.statMeta}>Answered {stats.attempted} question{stats.attempted === 1 ? '' : 's'}</Text>
       </View>
 
       {activeQ ? (
@@ -389,12 +366,11 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
 
           <Text style={styles.qTitle}>{activeQ.Question}</Text>
 
-          {/* HINT ROW WITH ICON */}
           {!!activeQ.Tip && (
             <View style={styles.qTipRow}>
               <MaterialCommunityIcons
                 name="lightbulb-on-outline"
-                size={16}
+                size={18}
                 color="#FFD966"
                 style={{ marginRight: 6 }}
               />
@@ -402,22 +378,22 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
             </View>
           )}
 
-          <View style={styles.qButtonsRow}>
+          <View style={styles.qButtonsColumn}>
             <TouchableOpacity
-              style={[styles.qBtn, styles.qBtnYes, answering && styles.qBtnDisabled]}
+              style={[styles.qBtnFull, answering && styles.qBtnDisabled]}
               onPress={() => submitAnswer('Yes')}
               disabled={answering}
               activeOpacity={0.85}
             >
-              <Text style={[styles.qBtnLabel, styles.qBtnYesLabel]}>Yes</Text>
+              <Text style={styles.qBtnFullLabel}>Yes</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.qBtn, styles.qBtnNo, answering && styles.qBtnDisabled]}
+              style={[styles.qBtnFull, answering && styles.qBtnDisabled]}
               onPress={() => submitAnswer('No')}
               disabled={answering}
               activeOpacity={0.85}
             >
-              <Text style={[styles.qBtnLabel, styles.qBtnNoLabel]}>No</Text>
+              <Text style={styles.qBtnFullLabel}>No</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -428,12 +404,6 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
       )}
 
       <View style={{ flex: 1 }} />
-
-      {feedback && (
-        <View style={[styles.toast, feedback.kind === 'ok' ? styles.toastOk : styles.toastBad]}>
-          <Text style={styles.toastText}>{feedback.text}</Text>
-        </View>
-      )}
 
       <View style={styles.flipWrap}>
         <TouchableOpacity activeOpacity={0.95} onPress={flipCard}>
@@ -489,28 +459,7 @@ const styles = StyleSheet.create({
   gameTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', textAlign: 'center' },
   subText: { color: '#A895E6', fontSize: 13, marginTop: 4 },
 
-  scoreRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 12,
-    alignSelf: 'stretch',
-  },
-  scorePill: {
-    flex: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  scoreLabel: {
-    color: '#A895E6',
-    fontSize: 11,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  scoreValue: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginTop: 4 },
+  statMeta: { color: '#A895E6', fontSize: 13, marginTop: 8 },
 
   /* question card */
   qCard: {
@@ -549,7 +498,7 @@ const styles = StyleSheet.create({
   timerFill: {
     backgroundColor: '#1CE783',
   },
-  qTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', marginTop: 8 },
+  qTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '800', marginTop: 18, lineHeight: 28 },
   /* HINT ROW + TEXT */
 
 
@@ -561,14 +510,17 @@ const styles = StyleSheet.create({
   },
   qTip: { color: '#D8D0FF', fontSize: 13, flexShrink: 1 },
 
-  qButtonsRow: { flexDirection: 'row', gap: 12, marginTop: 14 },
-  qBtn: { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 1 },
-  qBtnLabel: { fontSize: 16, fontWeight: '800' },
-  qBtnYes: { backgroundColor: 'rgba(28,231,131,0.12)', borderColor: '#1CE783' },
-  qBtnYesLabel: { color: '#1CE783' },
-  qBtnNo: { backgroundColor: 'rgba(113,64,255,0.12)', borderColor: 'rgba(113,64,255,1)' },
-  qBtnNoLabel: { color: '#B7A7FF' },
-  qBtnDisabled: { opacity: 0.6 },
+  qButtonsColumn: { gap: 12, marginTop: 18 },
+  qBtnFull: {
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  qBtnFullLabel: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', letterSpacing: 0.4 },
+  qBtnDisabled: { opacity: 0.5 },
 
   /* placeholder */
   placeholderCard: {
@@ -584,16 +536,6 @@ const styles = StyleSheet.create({
   placeholderText: { color: '#E6DFFF', fontSize: 15 },
 
   /* feedback toast */
-  toast: {
-    alignSelf: 'center',
-    marginBottom: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-  },
-  toastOk: { backgroundColor: 'rgba(28,231,131,0.20)', borderWidth: 1, borderColor: '#1CE783' },
-  toastBad: { backgroundColor: 'rgba(255,85,85,0.20)', borderWidth: 1, borderColor: '#FF5555' },
-  toastText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
 
   /* flip facts (bottom) */
   flipWrap: { marginTop: 12, alignItems: 'center', justifyContent: 'center' },
