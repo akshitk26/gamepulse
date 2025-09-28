@@ -7,8 +7,9 @@ import LoginScreen from './screens/LoginScreen';
 import BetpartyCreationScreen from './screens/BetpartyCreationScreen';
 import PartyScreen from './screens/PartyScreen';
 import GameScreen from './screens/GameScreen';
+import LeaderboardScreen from './screens/LeaderboardScreen';
 
-type AppRoute = 'lobby' | 'create' | 'waiting' | 'game';
+type AppRoute = 'lobby' | 'create' | 'waiting' | 'game' | 'leaderboard';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -78,6 +79,22 @@ export default function App() {
       <GameScreen
         lobbyId={activeLobbyId}
         onBack={() => setRoute('waiting')}
+        onShowLeaderboard={(id) => {
+          setActiveLobbyId(id);
+          setRoute('leaderboard');
+        }}
+      />
+    );
+  }
+
+  if (route === 'leaderboard' && activeLobbyId) {
+    return (
+      <LeaderboardScreen
+        lobbyId={activeLobbyId}
+        onExit={() => {
+          setActiveLobbyId(null);
+          setRoute('lobby');
+        }}
       />
     );
   }

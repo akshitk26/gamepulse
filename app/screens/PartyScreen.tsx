@@ -215,7 +215,11 @@ const PartyScreen: React.FC<LobbyWaitingProps> = ({ lobbyId, onExit, onStartGame
               setStarting(true);
               const { error } = await supabase
                 .from('lobbies')
-                .update({ status: 'active', beginning_time: new Date().toISOString() })
+                .update({
+                  status: 'active',
+                  beginning_time: new Date().toISOString(),
+                  current_question: null,
+                })
                 .eq('id', lobbyId);
               if (error) throw error;
               onStartGame?.(lobbyId);

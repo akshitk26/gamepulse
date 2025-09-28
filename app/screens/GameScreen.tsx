@@ -20,12 +20,14 @@ type LobbyRow = {
   buy_in: number;
   code: string;
   beginning_time: string | null;
+  is_finished?: boolean | null;
   current_question?: any | null; // JSON in DB
 };
 
 type Props = {
   lobbyId: string;
   onBack: () => void;
+  onShowLeaderboard: (lobbyId: string) => void;
 };
 
 type LiveQuestion = {
@@ -35,7 +37,7 @@ type LiveQuestion = {
   Choices: ('Yes' | 'No')[];
 };
 
-const QUESTION_DURATION_MS = 20_000;
+const QUESTION_DURATION_MS = 10_000;
 const CORRECT_POINTS = 20;
 const WRONG_POINTS = -10;
 const STATS_DEFAULT = { points: 0, correct: 0, attempted: 0 } as const;
@@ -64,10 +66,11 @@ const FACTS_BILLS_CHIEFS = [
   'Falcons 5–1 when holding foes under 24 points.',
 ];
 
-const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
+const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => {
   const [lobby, setLobby] = useState<LobbyRow | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [nowTs, setNowTs] = useState(() => Date.now());
 
   /** quick fact flip card (bottom) */
   const facts = useMemo(() => FACTS_BILLS_CHIEFS, []);
@@ -142,15 +145,20 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
         if (incoming) {
           setActiveQ(incoming);
           setQExpiresAt(Date.now() + QUESTION_DURATION_MS);
+          setNowTs(Date.now());
           setAnsweredKey(null);
         } else {
           setActiveQ(null);
           setQExpiresAt(null);
         }
       }
+      if (row?.is_finished) {
+        onShowLeaderboard(lobbyId);
+        return;
+      }
       if (row?.status && row.status !== 'active') onBack();
     },
-    [onBack]
+    [lobbyId, onBack, onShowLeaderboard]
   );
 
   /** initial load + realtime + polling fallback */
@@ -164,7 +172,7 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
         const [{ data: row, error }, { data: u, error: ue }] = await Promise.all([
           supabase
             .from('lobbies')
-            .select('id, owner_id, status, buy_in, code, beginning_time, current_question')
+            .select('id, owner_id, status, buy_in, code, beginning_time, is_finished, current_question')
             .eq('id', lobbyId)
             .single(),
           supabase.auth.getUser(),
@@ -202,7 +210,7 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
       if (sawRealtime || !alive) return;
       const { data } = await supabase
         .from('lobbies')
-        .select('id, owner_id, status, buy_in, code, beginning_time, current_question')
+        .select('id, owner_id, status, buy_in, code, beginning_time, is_finished, current_question')
         .eq('id', lobbyId)
         .single();
       if (!alive || !data) return;
@@ -227,6 +235,15 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
     const id = setTimeout(() => setActiveQ(null), remain);
     return () => clearTimeout(id);
   }, [qExpiresAt]);
+
+  /** ticking timer for question progress */
+  useEffect(() => {
+    if (!activeQ || !qExpiresAt) return;
+    const tick = () => setNowTs(Date.now());
+    tick();
+    const id = setInterval(tick, 200);
+    return () => clearInterval(id);
+  }, [activeQ, qExpiresAt]);
 
   useEffect(() => {
     refreshStats(currentUserId);
@@ -326,10 +343,9 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
     );
   }
 
-  const qRemainSec =
-    activeQ && qExpiresAt
-      ? Math.max(0, Math.ceil((qExpiresAt - Date.now()) / 1000))
-      : 0;
+  const remainingMs = activeQ && qExpiresAt ? Math.max(0, qExpiresAt - nowTs) : 0;
+  const qRemainSec = Math.ceil(remainingMs / 1000);
+  const progress = activeQ ? Math.min(1, Math.max(0, remainingMs / QUESTION_DURATION_MS)) : 0;
 
   return (
     <View style={styles.container}>
@@ -365,6 +381,10 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack }) => {
             <View style={styles.timerChip}>
               <Text style={styles.timerText}>{qRemainSec}s</Text>
             </View>
+          </View>
+          <View style={styles.timerRail}>
+            <View style={[styles.timerFill, { flex: progress }]} />
+            <View style={{ flex: 1 - progress }} />
           </View>
 
           <Text style={styles.qTitle}>{activeQ.Question}</Text>
@@ -518,7 +538,20 @@ const styles = StyleSheet.create({
     borderColor: '#1CE783',
   },
   timerText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  timerRail: {
+    marginTop: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    flexDirection: 'row',
+    overflow: 'hidden',
+    height: 6,
+  },
+  timerFill: {
+    backgroundColor: '#1CE783',
+  },
   qTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', marginTop: 8 },
+  /* HINT ROW + TEXT */
+
 
   /* HINT ROW + TEXT */
   qTipRow: {
