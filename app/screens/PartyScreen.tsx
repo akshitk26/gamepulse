@@ -38,12 +38,27 @@ type PlayerRow = {
   } | null;
 };
 
+const QUICK_FACTS = [
+  'Julio Jones averaged 9 targets per game that season.',
+  'Patriots converted 43% on third down in 2016.',
+  'Matt Ryan posted a 117.1 passer rating that year.',
+  'Falcons defense allowed 25 ppg during the regular season.',
+  'Patriots won time of possession in 11 of 16 games.',
+];
+
 const PartyScreen: React.FC<LobbyWaitingProps> = ({ lobbyId, onExit, onStartGame }) => {
   const [lobby, setLobby] = useState<LobbyRow | null>(null);
   const [players, setPlayers] = useState<PlayerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const facts = useMemo(() => QUICK_FACTS, []);
+  const [factIndex, setFactIndex] = useState(() => Math.floor(Math.random() * facts.length));
+  const currentFact = facts[factIndex] ?? '';
+  const cycleFact = useCallback(() => {
+    if (facts.length < 2) return;
+    setFactIndex((prev) => (prev + 1) % facts.length);
+  }, [facts]);
 
   const hydrateUser = useCallback(async () => {
     const { data, error } = await supabase.auth.getUser();
@@ -292,6 +307,18 @@ const styles = StyleSheet.create({
   lobbyCode: { color: '#1CE783', fontSize: 36, fontWeight: '800', letterSpacing: 6, marginTop: 10, marginBottom: 6 },
   codeMeta: { color: '#9088B4', fontSize: 14, marginBottom: 12 },
   potMeta: { color: '#1CE783', fontSize: 15, fontWeight: '700', marginBottom: 12 },
+  factPill: {
+    marginTop: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(28,231,131,0.35)',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(28,231,131,0.08)',
+  },
+  factLabel: { color: '#1CE783', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase' },
+  factText: { color: '#FFFFFF', fontSize: 14, marginTop: 6 },
+  factHint: { color: '#6F6895', fontSize: 11, marginTop: 4 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 },
   sectionTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
   sectionSubtitle: { color: '#6F6895', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 },
