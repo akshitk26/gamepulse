@@ -14,6 +14,7 @@ import * as Haptics from 'expo-haptics';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../supabase';
 import { parseSupabaseError } from '../utils/parseSupabaseError';
+import FadeSlideIn from '../components/FadeSlideIn';
 
 type LobbyRow = {
   id: string;
@@ -92,8 +93,8 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
     const toValue = isFlipped ? 0 : 180;
     Animated.timing(flip, {
       toValue,
-      duration: 240,
-      easing: Easing.out(Easing.cubic),
+      duration: 400,
+      easing: Easing.inOut(Easing.cubic),
       useNativeDriver: true,
     }).start(() => {
       setIsFlipped(!isFlipped);
@@ -353,13 +354,16 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
         <Text style={styles.backLabel}>{'← Back to lobby'}</Text>
       </TouchableOpacity>
 
-      <View style={styles.headerBlock}>
-        <Text style={styles.subText}>Lobby {lobby.code} • Buy-in {lobby.buy_in} GP</Text>
-        <Text style={styles.statMeta}>Answered {stats.attempted} question{stats.attempted === 1 ? '' : 's'}</Text>
-      </View>
+      <FadeSlideIn>
+        <View style={styles.headerBlock}>
+          <Text style={styles.subText}>Lobby {lobby.code} • Buy-in {lobby.buy_in} GP</Text>
+          <Text style={styles.statMeta}>Answered {stats.attempted} question{stats.attempted === 1 ? '' : 's'}</Text>
+        </View>
+      </FadeSlideIn>
 
       {activeQ ? (
-        <View style={styles.qCard}>
+        <FadeSlideIn key={keyForQ(activeQ)} delay={100}>
+          <View style={styles.qCard}>
           <View style={styles.qHeaderRow}>
             <Text style={styles.qKicker}>Live Bet</Text>
             <View style={styles.timerChip}>
@@ -403,16 +407,20 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
               <Text style={styles.qBtnFullLabel}>No</Text>
             </TouchableOpacity>
           </View>
-        </View>
+          </View>
+        </FadeSlideIn>
       ) : (
-        <View style={styles.placeholderCard}>
-          <Text style={styles.placeholderText}>Waiting for the next prompt…</Text>
-        </View>
+        <FadeSlideIn delay={200}>
+          <View style={styles.placeholderCard}>
+            <Text style={styles.placeholderText}>Waiting for the next prompt…</Text>
+          </View>
+        </FadeSlideIn>
       )}
 
       <View style={{ flex: 1 }} />
 
-      <View style={styles.flipWrap}>
+      <FadeSlideIn delay={400}>
+        <View style={styles.flipWrap}>
         <TouchableOpacity activeOpacity={0.95} onPress={flipCard}>
           <Animated.View
             style={[
@@ -438,7 +446,8 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
             <Text style={styles.cardHint}>Tap for another</Text>
           </Animated.View>
         </TouchableOpacity>
-      </View>
+        </View>
+      </FadeSlideIn>
     </View>
   );
 };

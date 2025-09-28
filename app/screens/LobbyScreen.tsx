@@ -11,6 +11,8 @@ import {
   View,
 } from 'react-native';
 import { supabase } from '../supabase';
+import FadeSlideIn from '../components/FadeSlideIn';
+import StaggeredFadeIn from '../components/StaggeredFadeIn';
 
 /** ---------- Utils ---------- */
 const parseSupabaseError = (err: unknown) => {
@@ -273,26 +275,29 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
       <View style={styles.greenGlow} />
 
       {/* Header with logout button */}
-      <View style={styles.headerRow}>
-        <View>
-          <Text style={styles.brand}>GamePulse</Text>
-          {loading ? (
-            <ActivityIndicator />
-          ) : (
-            <Text style={styles.tagline}>
-              Hey, {username ?? 'Player'} 👋 See today&apos;s lobbies.
-            </Text>
-          )}
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <View style={styles.creditBadge}>
-            {loading ? <ActivityIndicator /> : <Text style={styles.creditValue}>{credits}</Text>}
+      <FadeSlideIn>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.brand}>GamePulse</Text>
+            {loading ? (
+              <ActivityIndicator />
+            ) : (
+              <Text style={styles.tagline}>
+                Hey, {username ?? 'Player'} 👋 See today&apos;s lobbies.
+              </Text>
+            )}
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <View style={styles.creditBadge}>
+              {loading ? <ActivityIndicator /> : <Text style={styles.creditValue}>{credits}</Text>}
+            </View>
           </View>
         </View>
-      </View>
+      </FadeSlideIn>
 
       {/* Join lobby by code (still available) */}
-      <View style={styles.joinRow}>
+      <FadeSlideIn delay={200}>
+        <View style={styles.joinRow}>
         <TextInput
           style={styles.codeInput}
           placeholder="Enter lobby code"
@@ -309,10 +314,12 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
         >
           <Text style={[styles.actionLabel, styles.secondaryLabel]}>{joining ? 'Joining…' : 'Join'}</Text>
         </TouchableOpacity>
-      </View>
+        </View>
+      </FadeSlideIn>
 
       {/* Create lobby section */}
-      <View style={styles.createBox}>
+      <FadeSlideIn delay={400}>
+        <View style={styles.createBox}>
         <Text style={styles.sectionTitle}>Create your lobby</Text>
         <Text style={styles.sectionSubtitle}>
           Set a buy-in and pick a matchup on the next screen.
@@ -324,12 +331,14 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
         >
           <Text style={[styles.actionLabel, styles.primaryLabel]}>Open Creator</Text>
         </TouchableOpacity>
-      </View>
+        </View>
+      </FadeSlideIn>
 
       {/* Lobbies list (tap to auto-join) */}
-      <View style={styles.lobbySection}>
-        <Text style={styles.sectionTitle}>Current Lobbies</Text>
-        <Text style={styles.sectionSubtitle}>Tap a lobby to join instantly.</Text>
+      <FadeSlideIn delay={600}>
+        <View style={styles.lobbySection}>
+          <Text style={styles.sectionTitle}>Current Lobbies</Text>
+          <Text style={styles.sectionSubtitle}>Tap a lobby to join instantly.</Text>
 
         {loading ? (
           <ActivityIndicator />
@@ -338,7 +347,7 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
             data={lobbies}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingBottom: 16 }}
-            renderItem={({ item }) => {
+            renderItem={({ item, index }) => {
               const game = item.game;
               const matchup = game ? `${game.away} @ ${game.home}` : 'Game TBD';
               const time = game
@@ -347,34 +356,37 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
               const busy = joiningLobbyId === item.id;
 
               return (
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={() => joinLobbyFromList(item.id)}
-                  disabled={busy}
-                  style={[styles.lobbyCard, busy && { opacity: 0.6 }]}
-                >
-                  <View>
-                    <Text style={styles.lobbyName}>{matchup}</Text>
-                    <Text style={styles.lobbyMeta}>
-                      {time} • {item.status.toUpperCase()} • Code {item.code}
-                    </Text>
-                  </View>
-                  <View style={styles.buyInPill}>
-                    {busy ? (
-                      <ActivityIndicator />
-                    ) : (
-                      <>
-                        <Text style={styles.buyInValue}>{item.buy_in}</Text>
-                        <Text style={styles.buyInLabel}>GP</Text>
-                      </>
-                    )}
-                  </View>
-                </TouchableOpacity>
+                <StaggeredFadeIn index={index} staggerDelay={150}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => joinLobbyFromList(item.id)}
+                    disabled={busy}
+                    style={[styles.lobbyCard, busy && { opacity: 0.6 }]}
+                  >
+                    <View>
+                      <Text style={styles.lobbyName}>{matchup}</Text>
+                      <Text style={styles.lobbyMeta}>
+                        {time} • {item.status.toUpperCase()} • Code {item.code}
+                      </Text>
+                    </View>
+                    <View style={styles.buyInPill}>
+                      {busy ? (
+                        <ActivityIndicator />
+                      ) : (
+                        <>
+                          <Text style={styles.buyInValue}>{item.buy_in}</Text>
+                          <Text style={styles.buyInLabel}>GP</Text>
+                        </>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                </StaggeredFadeIn>
               );
             }}
           />
         )}
-      </View>
+        </View>
+      </FadeSlideIn>
       
       {/* Logout button in bottom left corner */}
       <TouchableOpacity onPress={signOut} style={styles.logoutButtonBottomLeft}>

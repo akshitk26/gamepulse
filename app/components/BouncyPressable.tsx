@@ -16,8 +16,9 @@ const BouncyPressable: React.FC<PropsWithChildren<PressableProps>> = ({ children
     Animated.spring(scale, {
       toValue,
       useNativeDriver: true,
-      friction: 6,
-      tension: 140,
+      friction: 8,
+      tension: 180,
+      damping: 15,
     }).start();
   };
 
@@ -33,7 +34,7 @@ const BouncyPressable: React.FC<PropsWithChildren<PressableProps>> = ({ children
       {...rest}
       onPressIn={(e) => {
         rest.onPressIn?.(e);
-        animateTo(0.95);
+        animateTo(0.97);
       }}
       onPressOut={(e) => {
         rest.onPressOut?.(e);
