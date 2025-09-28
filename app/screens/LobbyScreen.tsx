@@ -13,6 +13,8 @@ import {
 import { supabase } from '../supabase';
 import FadeSlideIn from '../components/FadeSlideIn';
 import StaggeredFadeIn from '../components/StaggeredFadeIn';
+import FloatingOrbs from '../components/FloatingOrbs';
+import FloatingParticles from '../components/FloatingParticles';
 
 /** ---------- Utils ---------- */
 const parseSupabaseError = (err: unknown) => {
@@ -271,8 +273,8 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <View style={styles.purpleGlow} />
-      <View style={styles.greenGlow} />
+      <FloatingOrbs />
+      <FloatingParticles />
 
       {/* Header with logout button */}
       <FadeSlideIn>
@@ -283,7 +285,7 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
               <ActivityIndicator />
             ) : (
               <Text style={styles.tagline}>
-                Hey, {username ?? 'Player'} 👋 See today&apos;s lobbies.
+                Hey, {username ?? 'Player'} 👋. Ready to win?
               </Text>
             )}
           </View>
@@ -320,9 +322,9 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
       {/* Create lobby section */}
       <FadeSlideIn delay={400}>
         <View style={styles.createBox}>
-        <Text style={styles.sectionTitle}>Create your lobby</Text>
+        <Text style={styles.sectionTitle}>Create a lobby</Text>
         <Text style={styles.sectionSubtitle}>
-          Set a buy-in and pick a matchup on the next screen.
+          Set a buy-in and pick a matchup to play with your friends!
         </Text>
         <TouchableOpacity
           style={[styles.actionButton, styles.primaryButton]}
@@ -471,12 +473,15 @@ const styles = StyleSheet.create({
   },
   createBox: { marginBottom: 24, gap: 12 },
   actionButton: {
-    borderRadius: 16,
-    paddingVertical: 14,
+    borderRadius: 12,
+    paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  primaryButton: { backgroundColor: '#1CE783' },
+  primaryButton: { 
+    backgroundColor: '#1CE783',
+    width: '100%',
+  },
   secondaryButton: {
     backgroundColor: 'rgba(28, 231, 131, 0.08)',
     borderWidth: 1,

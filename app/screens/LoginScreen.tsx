@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from 'react-native';
 import { supabase } from '../supabase';
+import FloatingOrbs from '../components/FloatingOrbs';
 
 export default function HomeScreen() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
@@ -60,7 +61,10 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Welcome to GamePulse</Text>
+      <FloatingOrbs />
+      
+      <Text style={styles.brand}>GamePulse</Text>
+      <Text style={styles.title}>No more boring games.</Text>
 
       {mode === 'signup' && (
         <TextInput
@@ -110,10 +114,59 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:{ flex:1, justifyContent:'center', padding:24, gap:12 },
-  title:{ fontSize:24, fontWeight:'700', textAlign:'center', marginBottom:8 },
-  input:{ borderWidth:1, borderColor:'#ccc', borderRadius:10, padding:12 },
-  button:{ backgroundColor:'#8000FF', padding:14, borderRadius:12, alignItems:'center' },
-  buttonText:{ color:'#fff', fontWeight:'700' },
-  link:{ textAlign:'center', color:'#8000FF', marginTop:8 }
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+    gap: 12,
+    backgroundColor: '#1a0a2e',
+  },
+  brand: {
+    fontSize: 48,
+    fontWeight: '900',
+    textAlign: 'center',
+    color: '#fff',
+    marginBottom: 8,
+    textShadowColor: '#8000FF',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '400',
+    textAlign: 'center',
+    color: '#bbb',
+    marginBottom: 32,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#444',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    padding: 14,
+    color: '#fff',
+    fontSize: 16,
+  },
+  button: {
+    backgroundColor: '#8000FF',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#8000FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  buttonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  link: {
+    textAlign: 'center',
+    color: '#1ce783',
+    marginTop: 16,
+    fontSize: 14,
+    textDecorationLine: 'underline',
+  },
 });

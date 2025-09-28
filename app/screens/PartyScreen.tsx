@@ -11,6 +11,8 @@ import {
 import * as Haptics from 'expo-haptics';
 import { supabase } from '../supabase';
 import { parseSupabaseError } from '../utils/parseSupabaseError';
+import FloatingOrbs from '../components/FloatingOrbs';
+import FloatingParticles from '../components/FloatingParticles';
 
 type LobbyWaitingProps = {
   lobbyId: string;
@@ -188,8 +190,8 @@ const PartyScreen: React.FC<LobbyWaitingProps> = ({ lobbyId, onExit, onStartGame
 
   return (
     <View style={styles.container}>
-      <View style={styles.purpleGlow} />
-      <View style={styles.greenGlow} />
+      <FloatingOrbs />
+      <FloatingParticles />
 
       <Text style={styles.heading}>Lobby Ready</Text>
       <Text style={styles.gameLine}>{gameLine}</Text>

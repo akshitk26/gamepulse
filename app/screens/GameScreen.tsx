@@ -4,17 +4,17 @@ import {
   Alert,
   Animated,
   Easing,
+  Pressable,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
-  Vibration,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../supabase';
 import { parseSupabaseError } from '../utils/parseSupabaseError';
 import FadeSlideIn from '../components/FadeSlideIn';
+import FloatingOrbs from '../components/FloatingOrbs';
 
 type LobbyRow = {
   id: string;
@@ -146,8 +146,7 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
       if (nextKey !== lastQKeyRef.current) {
         lastQKeyRef.current = nextKey;
         if (incoming) {
-          // Trigger vibration when a new question appears
-          Vibration.vibrate([0, 400, 200, 400]);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
           setActiveQ(incoming);
           setQExpiresAt(Date.now() + QUESTION_DURATION_MS);
           setNowTs(Date.now());
@@ -350,9 +349,11 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.backButton} onPress={handleBack} activeOpacity={0.8}>
+      <FloatingOrbs />
+
+      <Pressable style={styles.backButton} onPress={handleBack}>
         <Text style={styles.backLabel}>{'← Back to lobby'}</Text>
-      </TouchableOpacity>
+      </Pressable>
 
       <FadeSlideIn>
         <View style={styles.headerBlock}>
@@ -390,22 +391,20 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
           )}
 
           <View style={styles.qButtonsColumn}>
-            <TouchableOpacity
+            <Pressable
               style={[styles.qBtnFull, answering && styles.qBtnDisabled]}
               onPress={() => submitAnswer('Yes')}
               disabled={answering}
-              activeOpacity={0.85}
             >
               <Text style={styles.qBtnFullLabel}>Yes</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
+            </Pressable>
+            <Pressable
               style={[styles.qBtnFull, answering && styles.qBtnDisabled]}
               onPress={() => submitAnswer('No')}
               disabled={answering}
-              activeOpacity={0.85}
             >
               <Text style={styles.qBtnFullLabel}>No</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
           </View>
         </FadeSlideIn>
@@ -420,8 +419,8 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
       <View style={{ flex: 1 }} />
 
       <FadeSlideIn delay={400}>
-        <View style={styles.flipWrap}>
-        <TouchableOpacity activeOpacity={0.95} onPress={flipCard}>
+      <View style={styles.flipWrap}>
+        <Pressable onPress={flipCard}>
           <Animated.View
             style={[
               styles.card,
@@ -445,7 +444,7 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
             <Text style={styles.cardText}>{facts[factIndex]}</Text>
             <Text style={styles.cardHint}>Tap for another</Text>
           </Animated.View>
-        </TouchableOpacity>
+        </Pressable>
         </View>
       </FadeSlideIn>
     </View>

@@ -4,6 +4,8 @@ import ConfettiCannon from 'react-native-confetti-cannon';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '../supabase';
 import { parseSupabaseError } from '../utils/parseSupabaseError';
+import FloatingOrbs from '../components/FloatingOrbs';
+import FloatingParticles from '../components/FloatingParticles';
 
 type LeaderRow = {
   user_id: string;
@@ -122,8 +124,8 @@ const LeaderboardScreen: React.FC<Props> = ({ lobbyId, onExit }) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.purpleGlow} />
-      <View style={styles.greenGlow} />
+      <FloatingOrbs />
+      <FloatingParticles />
       
       {/* Confetti for winners */}
       {showConfetti && (

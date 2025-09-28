@@ -16,9 +16,8 @@ const BouncyPressable: React.FC<PropsWithChildren<PressableProps>> = ({ children
     Animated.spring(scale, {
       toValue,
       useNativeDriver: true,
-      friction: 8,
       tension: 180,
-      damping: 15,
+      friction: 8,
     }).start();
   };
 
