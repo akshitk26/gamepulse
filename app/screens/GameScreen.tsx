@@ -8,7 +8,9 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Vibration,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../supabase';
 import { parseSupabaseError } from '../utils/parseSupabaseError';
@@ -143,6 +145,8 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
       if (nextKey !== lastQKeyRef.current) {
         lastQKeyRef.current = nextKey;
         if (incoming) {
+          // Trigger vibration when a new question appears
+          Vibration.vibrate([0, 400, 200, 400]);
           setActiveQ(incoming);
           setQExpiresAt(Date.now() + QUESTION_DURATION_MS);
           setNowTs(Date.now());
@@ -272,6 +276,10 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
     if (!activeQ || !currentUserId) return;
     const qKey = keyForQ(activeQ);
     if (answering || answeredKey === qKey) return; // double-tap guard
+    
+    // Haptic feedback when user taps an answer
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
     setAnswering(true);
     try {
       const isCorrect =
@@ -346,7 +354,6 @@ const GameScreen: React.FC<Props> = ({ lobbyId, onBack, onShowLeaderboard }) => 
       </TouchableOpacity>
 
       <View style={styles.headerBlock}>
-        <Text style={styles.gameTitle}>Questions will appear here as the game goes on</Text>
         <Text style={styles.subText}>Lobby {lobby.code} • Buy-in {lobby.buy_in} GP</Text>
         <Text style={styles.statMeta}>Answered {stats.attempted} question{stats.attempted === 1 ? '' : 's'}</Text>
       </View>

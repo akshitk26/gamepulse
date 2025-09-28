@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import ConfettiCannon from 'react-native-confetti-cannon';
+import * as Haptics from 'expo-haptics';
 import { supabase } from '../supabase';
 import { parseSupabaseError } from '../utils/parseSupabaseError';
 
@@ -27,10 +29,33 @@ const LeaderboardScreen: React.FC<Props> = ({ lobbyId, onExit }) => {
   const [buyIn, setBuyIn] = useState(0);
   const [pool, setPool] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const confettiRef = useRef(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
   }, []);
+
+  // Trigger confetti and haptic feedback for positive profit users
+  useEffect(() => {
+    if (!loading && leaders.length > 0 && currentUserId) {
+      const currentUser = leaders.find(leader => leader.user_id === currentUserId);
+      if (currentUser && currentUser.profit > 0) {
+        // Multiple haptic feedback bursts for celebration
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 200);
+        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 400);
+        
+        // Show confetti
+        setShowConfetti(true);
+        
+        // Hide confetti after 4 seconds
+        setTimeout(() => {
+          setShowConfetti(false);
+        }, 4000);
+      }
+    }
+  }, [loading, leaders, currentUserId]);
 
   useEffect(() => {
     let mounted = true;
@@ -99,6 +124,29 @@ const LeaderboardScreen: React.FC<Props> = ({ lobbyId, onExit }) => {
     <View style={styles.container}>
       <View style={styles.purpleGlow} />
       <View style={styles.greenGlow} />
+      
+      {/* Confetti for winners */}
+      {showConfetti && (
+        <>
+          <ConfettiCannon
+            ref={confettiRef}
+            count={150}
+            origin={{ x: -10, y: 0 }}
+            autoStart={true}
+            fadeOut={true}
+            fallSpeed={2500}
+            colors={['#1CE783', '#8000FF', '#FFD700', '#FF6B6B', '#4ECDC4']}
+          />
+          <ConfettiCannon
+            count={100}
+            origin={{ x: 410, y: 0 }}
+            autoStart={true}
+            fadeOut={true}
+            fallSpeed={3000}
+            colors={['#1CE783', '#8000FF', '#FFD700', '#FF6B6B', '#4ECDC4']}
+          />
+        </>
+      )}
 
       <Text style={styles.title}>Final Standings</Text>
       <Text style={styles.subtitle}>

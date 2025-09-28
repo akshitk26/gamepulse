@@ -275,12 +275,12 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
       {/* Header with logout button */}
       <View style={styles.headerRow}>
         <View>
-          <Text style={styles.brand}>GamePoints</Text>
+          <Text style={styles.brand}>GamePulse</Text>
           {loading ? (
             <ActivityIndicator />
           ) : (
             <Text style={styles.tagline}>
-              Hey, {username ?? 'Player'} 👋 See today&apos;s BetParties.
+              Hey, {username ?? 'Player'} 👋 See today&apos;s lobbies.
             </Text>
           )}
         </View>
@@ -288,9 +288,6 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
           <View style={styles.creditBadge}>
             {loading ? <ActivityIndicator /> : <Text style={styles.creditValue}>{credits}</Text>}
           </View>
-          <TouchableOpacity onPress={signOut} style={styles.logoutButton}>
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -378,6 +375,11 @@ const LobbyScreen: React.FC<Props> = ({ onEnterLobby, onCreateLobby }) => {
           />
         )}
       </View>
+      
+      {/* Logout button in bottom left corner */}
+      <TouchableOpacity onPress={signOut} style={styles.logoutButtonBottomLeft}>
+        <Text style={styles.logoutText}>Logout</Text>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -432,6 +434,17 @@ const styles = StyleSheet.create({
   },
   creditValue: { color: '#1CE783', fontSize: 18, fontWeight: '700' },
   logoutButton: { marginTop: 6, paddingVertical: 4, paddingHorizontal: 8 },
+  logoutButtonBottomLeft: {
+    position: 'absolute',
+    bottom: 32,
+    left: 24,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255, 85, 85, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 85, 85, 0.3)',
+  },
   logoutText: { color: '#FF5555', fontSize: 12, fontWeight: '600' },
   joinRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 24, gap: 12 },
   codeInput: {
