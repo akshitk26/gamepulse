@@ -8,6 +8,7 @@ import BetpartyCreationScreen from './screens/BetpartyCreationScreen';
 import PartyScreen from './screens/PartyScreen';
 import GameScreen from './screens/GameScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
+import ScreenTransition from './components/ScreenTransition';
 
 type AppRoute = 'lobby' | 'create' | 'waiting' | 'game' | 'leaderboard';
 
@@ -42,12 +43,12 @@ export default function App() {
     );
   }
 
-  if (!session) {
-    return <LoginScreen />;
-  }
+  let content: React.ReactElement;
 
-  if (route === 'create') {
-    return (
+  if (!session) {
+    content = <LoginScreen />;
+  } else if (route === 'create') {
+    content = (
       <BetpartyCreationScreen
         onBack={() => setRoute('lobby')}
         onCreated={(lobbyId) => {
@@ -56,10 +57,8 @@ export default function App() {
         }}
       />
     );
-  }
-
-  if (route === 'waiting' && activeLobbyId) {
-    return (
+  } else if (route === 'waiting' && activeLobbyId) {
+    content = (
       <PartyScreen
         lobbyId={activeLobbyId}
         onExit={() => {
@@ -72,10 +71,8 @@ export default function App() {
         }}
       />
     );
-  }
-
-  if (route === 'game' && activeLobbyId) {
-    return (
+  } else if (route === 'game' && activeLobbyId) {
+    content = (
       <GameScreen
         lobbyId={activeLobbyId}
         onBack={() => setRoute('waiting')}
@@ -85,10 +82,8 @@ export default function App() {
         }}
       />
     );
-  }
-
-  if (route === 'leaderboard' && activeLobbyId) {
-    return (
+  } else if (route === 'leaderboard' && activeLobbyId) {
+    content = (
       <LeaderboardScreen
         lobbyId={activeLobbyId}
         onExit={() => {
@@ -97,15 +92,28 @@ export default function App() {
         }}
       />
     );
+  } else {
+    content = (
+      <LobbyScreen
+        onCreateLobby={() => setRoute('create')}
+        onEnterLobby={(lobbyId) => {
+          setActiveLobbyId(lobbyId);
+          setRoute('waiting');
+        }}
+      />
+    );
   }
 
+  const dependencyKey = `${route}-${activeLobbyId ?? 'none'}-${session?.user?.id ?? 'guest'}`;
+  const backgroundColor = !session
+    ? '#05030A'
+    : route === 'game'
+      ? '#1A0D3F'
+      : '#05030A';
+
   return (
-    <LobbyScreen
-      onCreateLobby={() => setRoute('create')}
-      onEnterLobby={(lobbyId) => {
-        setActiveLobbyId(lobbyId);
-        setRoute('waiting');
-      }}
-    />
+    <ScreenTransition dependency={dependencyKey} backgroundColor={backgroundColor}>
+      {content}
+    </ScreenTransition>
   );
 }

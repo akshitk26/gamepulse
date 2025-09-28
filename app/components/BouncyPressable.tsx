@@ -1,5 +1,13 @@
-import React, { PropsWithChildren, useRef } from 'react';
-import { Animated, Pressable, PressableProps, StyleSheet } from 'react-native';
+import React, { PropsWithChildren, useMemo, useRef } from 'react';
+import {
+  Animated,
+  Pressable,
+  PressableProps,
+  PressableStateCallbackType,
+  StyleProp,
+  StyleSheet,
+  ViewStyle,
+} from 'react-native';
 
 const BouncyPressable: React.FC<PropsWithChildren<PressableProps>> = ({ children, style, ...rest }) => {
   const scale = useRef(new Animated.Value(1)).current;
@@ -13,6 +21,13 @@ const BouncyPressable: React.FC<PropsWithChildren<PressableProps>> = ({ children
     }).start();
   };
 
+  const styleFn = useMemo(() => {
+    return (state: PressableStateCallbackType): StyleProp<ViewStyle> => {
+      const base = typeof style === 'function' ? style(state) : style;
+      return [base, state.pressed && styles.pressed];
+    };
+  }, [style]);
+
   return (
     <Pressable
       {...rest}
@@ -24,7 +39,7 @@ const BouncyPressable: React.FC<PropsWithChildren<PressableProps>> = ({ children
         rest.onPressOut?.(e);
         animateTo(1);
       }}
-      style={({ pressed }) => [style, pressed && styles.pressed]}
+      style={styleFn}
     >
       <Animated.View style={{ transform: [{ scale }] }}>
         {children}

@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { supabase } from '../supabase';
 import { parseSupabaseError } from '../utils/parseSupabaseError';
 
@@ -129,6 +130,7 @@ const PartyScreen: React.FC<LobbyWaitingProps> = ({ lobbyId, onExit, onStartGame
   }, [hydrateUser, loadLobby, loadPlayers, lobbyId]);
 
   const handleLeave = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       if (!currentUserId) {
         onExit?.();
@@ -226,6 +228,7 @@ const PartyScreen: React.FC<LobbyWaitingProps> = ({ lobbyId, onExit, onStartGame
           style={[styles.startButton, starting && styles.disabledButton]}
           onPress={async () => {
             if (starting) return;
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
             try {
               setStarting(true);
               const { error } = await supabase
